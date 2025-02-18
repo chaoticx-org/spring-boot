@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,11 +18,11 @@ package org.springframework.boot.gradle.plugin;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 import org.gradle.api.DefaultTask;
 import org.gradle.api.InvalidUserDataException;
@@ -122,8 +122,8 @@ public class ResolveMainClassName extends DefaultTask {
 		File outputFile = this.outputFile.getAsFile().get();
 		outputFile.getParentFile().mkdirs();
 		String mainClassName = resolveMainClassName();
-		Files.write(outputFile.toPath(), mainClassName.getBytes(StandardCharsets.UTF_8), StandardOpenOption.WRITE,
-				StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+		Files.writeString(outputFile.toPath(), mainClassName, StandardOpenOption.WRITE, StandardOpenOption.CREATE,
+				StandardOpenOption.TRUNCATE_EXISTING);
 	}
 
 	private String resolveMainClassName() {
@@ -131,8 +131,13 @@ public class ResolveMainClassName extends DefaultTask {
 		if (configuredMainClass != null) {
 			return configuredMainClass;
 		}
-		return getClasspath().filter(File::isDirectory).getFiles().stream().map(this::findMainClass)
-				.filter(Objects::nonNull).findFirst().orElse("");
+		return getClasspath().filter(File::isDirectory)
+			.getFiles()
+			.stream()
+			.map(this::findMainClass)
+			.filter(Objects::nonNull)
+			.findFirst()
+			.orElse("");
 	}
 
 	private String findMainClass(File file) {
@@ -145,20 +150,32 @@ public class ResolveMainClassName extends DefaultTask {
 	}
 
 	Provider<String> readMainClassName() {
-		return this.outputFile.map(new ClassNameReader());
+		String classpath = getClasspath().filter(File::isDirectory)
+			.getFiles()
+			.stream()
+			.map(File::getAbsolutePath)
+			.collect(Collectors.joining(File.pathSeparator));
+		return this.outputFile.map(new ClassNameReader(classpath));
 	}
 
 	private static final class ClassNameReader implements Transformer<String, RegularFile> {
+
+		private final String classpath;
+
+		private ClassNameReader(String classpath) {
+			this.classpath = classpath;
+		}
 
 		@Override
 		public String transform(RegularFile file) {
 			if (file.getAsFile().length() == 0) {
 				throw new InvalidUserDataException(
-						"Main class name has not been configured and it could not be resolved");
+						"Main class name has not been configured and it could not be resolved from classpath "
+								+ this.classpath);
 			}
 			Path output = file.getAsFile().toPath();
 			try {
-				return new String(Files.readAllBytes(output), StandardCharsets.UTF_8);
+				return Files.readString(output);
 			}
 			catch (IOException ex) {
 				throw new RuntimeException("Failed to read main class name from '" + output + "'");

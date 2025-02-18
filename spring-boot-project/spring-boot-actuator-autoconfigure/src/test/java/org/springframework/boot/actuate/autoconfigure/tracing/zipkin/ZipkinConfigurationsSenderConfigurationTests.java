@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2025 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,76 +16,114 @@
 
 package org.springframework.boot.actuate.autoconfigure.tracing.zipkin;
 
+import java.net.http.HttpClient;
+
 import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
-import zipkin2.reporter.Sender;
+import zipkin2.reporter.BytesMessageSender;
+import zipkin2.reporter.HttpEndpointSupplier;
 import zipkin2.reporter.urlconnection.URLConnectionSender;
 
 import org.springframework.boot.actuate.autoconfigure.tracing.zipkin.ZipkinConfigurations.SenderConfiguration;
+import org.springframework.boot.actuate.autoconfigure.tracing.zipkin.ZipkinConfigurations.UrlConnectionSenderConfiguration;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.FilteredClassLoader;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
-import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
 
 /**
  * Tests for {@link SenderConfiguration}.
  *
  * @author Moritz Halbritter
+ * @author Wick Dynex
  */
+@SuppressWarnings({ "deprecation", "removal" })
 class ZipkinConfigurationsSenderConfigurationTests {
 
 	private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
-			.withConfiguration(AutoConfigurations.of(SenderConfiguration.class));
+		.withConfiguration(AutoConfigurations.of(DefaultEncodingConfiguration.class, SenderConfiguration.class));
 
 	@Test
-	void shouldSupplyBeans() {
+	void shouldSupplyDefaultHttpClientSenderBean() {
 		this.contextRunner.run((context) -> {
-			assertThat(context).hasSingleBean(Sender.class);
-			assertThat(context).hasSingleBean(URLConnectionSender.class);
-			assertThat(context).doesNotHaveBean(ZipkinRestTemplateSender.class);
+			assertThat(context).hasSingleBean(BytesMessageSender.class);
+			assertThat(context).hasSingleBean(ZipkinHttpClientSender.class);
+			assertThat(context).doesNotHaveBean(URLConnectionSender.class);
 		});
 	}
 
 	@Test
-	void shouldUseRestTemplateSenderIfUrlConnectionSenderIsNotAvailable() {
-		this.contextRunner.withUserConfiguration(RestTemplateConfiguration.class)
-				.withClassLoader(new FilteredClassLoader("zipkin2.reporter.urlconnection")).run((context) -> {
-					assertThat(context).doesNotHaveBean(URLConnectionSender.class);
-					assertThat(context).hasSingleBean(Sender.class);
-					assertThat(context).hasSingleBean(ZipkinRestTemplateSender.class);
-				});
+	void shouldUseUrlConnectionSenderIfHttpClientIsNotAvailable() {
+		this.contextRunner.withUserConfiguration(UrlConnectionSenderConfiguration.class)
+			.withClassLoader(new FilteredClassLoader(HttpClient.class))
+			.run((context) -> {
+				assertThat(context).doesNotHaveBean(ZipkinHttpClientSender.class);
+				assertThat(context).hasSingleBean(BytesMessageSender.class);
+				assertThat(context).hasSingleBean(URLConnectionSender.class);
+			});
 	}
 
 	@Test
 	void shouldBackOffOnCustomBeans() {
 		this.contextRunner.withUserConfiguration(CustomConfiguration.class).run((context) -> {
 			assertThat(context).hasBean("customSender");
-			assertThat(context).hasSingleBean(Sender.class);
+			assertThat(context).hasSingleBean(BytesMessageSender.class);
 		});
 	}
 
+	@Test
+	void shouldUseCustomHttpEndpointSupplierFactory() {
+		this.contextRunner.withUserConfiguration(CustomHttpEndpointSupplierFactoryConfiguration.class)
+			.withClassLoader(new FilteredClassLoader(HttpClient.class))
+			.run((context) -> {
+				URLConnectionSender urlConnectionSender = context.getBean(URLConnectionSender.class);
+				assertThat(urlConnectionSender).extracting("delegate.endpointSupplier")
+					.isInstanceOf(CustomHttpEndpointSupplier.class);
+			});
+	}
+
 	@Configuration(proxyBeanMethods = false)
-	private static class RestTemplateConfiguration {
+	private static final class CustomConfiguration {
 
 		@Bean
-		RestTemplateBuilder restTemplateBuilder() {
-			return new RestTemplateBuilder();
+		BytesMessageSender customSender() {
+			return mock(BytesMessageSender.class);
 		}
 
 	}
 
 	@Configuration(proxyBeanMethods = false)
-	private static class CustomConfiguration {
+	private static final class CustomHttpEndpointSupplierFactoryConfiguration {
 
 		@Bean
-		Sender customSender() {
-			return Mockito.mock(Sender.class);
+		HttpEndpointSupplier.Factory httpEndpointSupplier() {
+			return new CustomHttpEndpointSupplierFactory();
 		}
 
+	}
+
+	private static final class CustomHttpEndpointSupplierFactory implements HttpEndpointSupplier.Factory {
+
+		@Override
+		public HttpEndpointSupplier create(String endpoint) {
+			return new CustomHttpEndpointSupplier(endpoint);
+		}
+
+	}
+
+	private record CustomHttpEndpointSupplier(String endpoint) implements HttpEndpointSupplier {
+
+		@Override
+		public String get() {
+			return this.endpoint;
+		}
+
+		@Override
+		public void close() {
+		}
 	}
 
 }

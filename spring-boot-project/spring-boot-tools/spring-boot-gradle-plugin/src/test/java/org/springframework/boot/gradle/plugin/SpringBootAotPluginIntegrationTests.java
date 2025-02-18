@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2023 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,12 +16,21 @@
 
 package org.springframework.boot.gradle.plugin;
 
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.util.List;
+
+import org.gradle.testkit.runner.TaskOutcome;
 import org.junit.jupiter.api.TestTemplate;
+import org.junit.jupiter.api.condition.EnabledOnJre;
+import org.junit.jupiter.api.condition.JRE;
 
 import org.springframework.boot.gradle.junit.GradleCompatibility;
 import org.springframework.boot.testsupport.gradle.testkit.GradleBuild;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatNoException;
 
 /**
  * Integration tests for {@link SpringBootAotPlugin}.
@@ -34,15 +43,121 @@ class SpringBootAotPluginIntegrationTests {
 	GradleBuild gradleBuild;
 
 	@TestTemplate
-	void noGenerateAotSourcesTaskWithoutAotPluginApplied() {
-		assertThat(this.gradleBuild.build("taskExists", "-PtaskName=generateAotSources").getOutput())
-				.contains("generateAotSources exists = false");
+	void noProcessAotTaskWithoutAotPluginApplied() {
+		assertThat(this.gradleBuild.build("taskExists", "-PtaskName=processAot").getOutput())
+			.contains("processAot exists = false");
 	}
 
 	@TestTemplate
-	void applyingAotPluginCreatesGenerateAotSourcesTask() {
-		assertThat(this.gradleBuild.build("taskExists", "-PtaskName=generateAotSources").getOutput())
-				.contains("generateAotSources exists = true");
+	void noProcessTestAotTaskWithoutAotPluginApplied() {
+		assertThat(this.gradleBuild.build("taskExists", "-PtaskName=processTestAot").getOutput())
+			.contains("processTestAot exists = false");
+	}
+
+	@TestTemplate
+	void applyingAotPluginCreatesProcessAotTask() {
+		assertThat(this.gradleBuild.build("taskExists", "-PtaskName=processAot").getOutput())
+			.contains("processAot exists = true");
+	}
+
+	@TestTemplate
+	void applyingAotPluginCreatesProcessTestAotTask() {
+		assertThat(this.gradleBuild.build("taskExists", "-PtaskName=processTestAot").getOutput())
+			.contains("processTestAot exists = true");
+	}
+
+	@TestTemplate
+	void processAotHasLibraryResourcesOnItsClasspath() throws IOException {
+		File settings = new File(this.gradleBuild.getProjectDir(), "settings.gradle");
+		Files.write(settings.toPath(), List.of("include 'library'"));
+		File library = new File(this.gradleBuild.getProjectDir(), "library");
+		library.mkdirs();
+		Files.write(library.toPath().resolve("build.gradle"), List.of("plugins {", "    id 'java-library'", "}"));
+		assertThat(this.gradleBuild.build("processAotClasspath").getOutput()).contains("library.jar");
+	}
+
+	@TestTemplate
+	void processTestAotHasLibraryResourcesOnItsClasspath() throws IOException {
+		File settings = new File(this.gradleBuild.getProjectDir(), "settings.gradle");
+		Files.write(settings.toPath(), List.of("include 'library'"));
+		File library = new File(this.gradleBuild.getProjectDir(), "library");
+		library.mkdirs();
+		Files.write(library.toPath().resolve("build.gradle"), List.of("plugins {", "    id 'java-library'", "}"));
+		assertThat(this.gradleBuild.build("processTestAotClasspath").getOutput()).contains("library.jar");
+	}
+
+	@TestTemplate
+	void processAotHasTransitiveRuntimeDependenciesOnItsClasspath() {
+		String output = this.gradleBuild.build("processAotClasspath").getOutput();
+		assertThat(output).contains("org.jboss.logging" + File.separatorChar + "jboss-logging");
+	}
+
+	@TestTemplate
+	void processTestAotHasTransitiveRuntimeDependenciesOnItsClasspath() {
+		String output = this.gradleBuild.build("processTestAotClasspath").getOutput();
+		assertThat(output).contains("org.jboss.logging" + File.separatorChar + "jboss-logging");
+	}
+
+	@TestTemplate
+	void processAotDoesNotHaveDevelopmentOnlyDependenciesOnItsClasspath() {
+		String output = this.gradleBuild.build("processAotClasspath").getOutput();
+		assertThat(output).doesNotContain("commons-lang");
+	}
+
+	@TestTemplate
+	void processTestAotDoesNotHaveDevelopmentOnlyDependenciesOnItsClasspath() {
+		String output = this.gradleBuild.build("processTestAotClasspath").getOutput();
+		assertThat(output).doesNotContain("commons-lang");
+	}
+
+	@TestTemplate
+	void processAotDoesNotHaveTestAndDevelopmentOnlyDependenciesOnItsClasspath() {
+		String output = this.gradleBuild.build("processAotClasspath").getOutput();
+		assertThat(output).doesNotContain("commons-lang");
+	}
+
+	@TestTemplate
+	void processTestAotHasTestAndDevelopmentOnlyDependenciesOnItsClasspath() {
+		String output = this.gradleBuild.build("processTestAotClasspath").getOutput();
+		assertThat(output).contains("commons-lang");
+	}
+
+	@TestTemplate
+	void processAotRunsWhenProjectHasMainSource() throws IOException {
+		writeMainClass("org.springframework.boot", "SpringApplicationAotProcessor");
+		writeMainClass("com.example", "Main");
+		assertThat(this.gradleBuild.build("processAot").task(":processAot").getOutcome())
+			.isEqualTo(TaskOutcome.SUCCESS);
+	}
+
+	@TestTemplate
+	void processTestAotIsSkippedWhenProjectHasNoTestSource() {
+		assertThat(this.gradleBuild.build("processTestAot").task(":processTestAot").getOutcome())
+			.isEqualTo(TaskOutcome.NO_SOURCE);
+	}
+
+	// gh-37343
+	@TestTemplate
+	@EnabledOnJre(JRE.JAVA_17)
+	void applyingAotPluginDoesNotPreventConfigurationOfJavaToolchainLanguageVersion() {
+		assertThatNoException().isThrownBy(() -> this.gradleBuild.build("help").getOutput());
+	}
+
+	private void writeMainClass(String packageName, String className) throws IOException {
+		File java = new File(this.gradleBuild.getProjectDir(),
+				"src/main/java/" + packageName.replace(".", "/") + "/" + className + ".java");
+		java.getParentFile().mkdirs();
+		Files.writeString(java.toPath(), """
+				package %s;
+
+				public class %s {
+
+					public static void main(String[] args) {
+
+					}
+
+				}
+				""".formatted(packageName, className));
 	}
 
 }

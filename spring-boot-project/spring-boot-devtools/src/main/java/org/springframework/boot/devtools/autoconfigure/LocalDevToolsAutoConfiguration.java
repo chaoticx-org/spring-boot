@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2025 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,8 +25,8 @@ import org.apache.commons.logging.LogFactory;
 
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBooleanProperty;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.devtools.autoconfigure.DevToolsProperties.Restart;
 import org.springframework.boot.devtools.classpath.ClassPathChangedEvent;
@@ -48,6 +48,7 @@ import org.springframework.context.annotation.Lazy;
 import org.springframework.context.event.ContextRefreshedEvent;
 import org.springframework.context.event.GenericApplicationListener;
 import org.springframework.core.ResolvableType;
+import org.springframework.core.log.LogMessage;
 import org.springframework.util.StringUtils;
 
 /**
@@ -67,7 +68,7 @@ public class LocalDevToolsAutoConfiguration {
 	 * Local LiveReload configuration.
 	 */
 	@Configuration(proxyBeanMethods = false)
-	@ConditionalOnProperty(prefix = "spring.devtools.livereload", name = "enabled", matchIfMissing = true)
+	@ConditionalOnBooleanProperty(name = "spring.devtools.livereload.enabled", matchIfMissing = true)
 	static class LiveReloadConfiguration {
 
 		@Bean
@@ -95,10 +96,8 @@ public class LocalDevToolsAutoConfiguration {
 	 */
 	@Lazy(false)
 	@Configuration(proxyBeanMethods = false)
-	@ConditionalOnProperty(prefix = "spring.devtools.restart", name = "enabled", matchIfMissing = true)
+	@ConditionalOnBooleanProperty(name = "spring.devtools.restart.enabled", matchIfMissing = true)
 	static class RestartConfiguration {
-
-		private static final Log restarterLogger = LogFactory.getLog(Restarter.class);
 
 		private final DevToolsProperties properties;
 
@@ -107,17 +106,9 @@ public class LocalDevToolsAutoConfiguration {
 		}
 
 		@Bean
-		ApplicationListener<ClassPathChangedEvent> restartingClassPathChangedEventListener(
+		RestartingClassPathChangeChangedEventListener restartingClassPathChangedEventListener(
 				FileSystemWatcherFactory fileSystemWatcherFactory) {
-			return (event) -> {
-				if (event.isRestartRequired()) {
-					if (restarterLogger.isDebugEnabled()) {
-						restarterLogger.debug(
-								"Application restart required due to the following changes: " + event.getChangeSet());
-					}
-					Restarter.getInstance().restart(new FileWatchingFailureHandler(fileSystemWatcherFactory));
-				}
-			};
+			return new RestartingClassPathChangeChangedEventListener(fileSystemWatcherFactory);
 		}
 
 		@Bean
@@ -143,7 +134,7 @@ public class LocalDevToolsAutoConfiguration {
 		}
 
 		@Bean
-		@ConditionalOnProperty(prefix = "spring.devtools.restart", name = "log-condition-evaluation-delta",
+		@ConditionalOnBooleanProperty(name = "spring.devtools.restart.log-condition-evaluation-delta",
 				matchIfMissing = true)
 		ConditionEvaluationDeltaLoggingListener conditionEvaluationDeltaLoggingListener() {
 			return new ConditionEvaluationDeltaLoggingListener();
@@ -191,8 +182,8 @@ public class LocalDevToolsAutoConfiguration {
 
 		@Override
 		public void onApplicationEvent(ApplicationEvent event) {
-			if (event instanceof ContextRefreshedEvent || (event instanceof ClassPathChangedEvent
-					&& !((ClassPathChangedEvent) event).isRestartRequired())) {
+			if (event instanceof ContextRefreshedEvent || (event instanceof ClassPathChangedEvent classPathChangedEvent
+					&& !classPathChangedEvent.isRestartRequired())) {
 				this.liveReloadServer.triggerReload();
 			}
 		}
@@ -200,6 +191,27 @@ public class LocalDevToolsAutoConfiguration {
 		@Override
 		public int getOrder() {
 			return 0;
+		}
+
+	}
+
+	static class RestartingClassPathChangeChangedEventListener implements ApplicationListener<ClassPathChangedEvent> {
+
+		private static final Log logger = LogFactory.getLog(RestartingClassPathChangeChangedEventListener.class);
+
+		private final FileSystemWatcherFactory fileSystemWatcherFactory;
+
+		RestartingClassPathChangeChangedEventListener(FileSystemWatcherFactory fileSystemWatcherFactory) {
+			this.fileSystemWatcherFactory = fileSystemWatcherFactory;
+		}
+
+		@Override
+		public void onApplicationEvent(ClassPathChangedEvent event) {
+			if (event.isRestartRequired()) {
+				logger.info(LogMessage.format("Restarting due to %s", event.overview()));
+				logger.debug(LogMessage.format("Change set: %s", event.getChangeSet()));
+				Restarter.getInstance().restart(new FileWatchingFailureHandler(this.fileSystemWatcherFactory));
+			}
 		}
 
 	}

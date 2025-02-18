@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,11 +22,11 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.micrometer.tracing.reporter.wavefront.SpanMetrics;
 import io.micrometer.tracing.reporter.wavefront.WavefrontBraveSpanHandler;
-import io.micrometer.tracing.reporter.wavefront.WavefrontOtelSpanHandler;
+import io.micrometer.tracing.reporter.wavefront.WavefrontOtelSpanExporter;
 import io.micrometer.tracing.reporter.wavefront.WavefrontSpanHandler;
 import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
 
+import org.springframework.boot.actuate.autoconfigure.wavefront.WavefrontAutoConfiguration;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.FilteredClassLoader;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
@@ -40,11 +40,12 @@ import static org.mockito.Mockito.mock;
  * Tests for {@link WavefrontTracingAutoConfiguration}.
  *
  * @author Moritz Halbritter
+ * @author Glenn Oppegard
  */
 class WavefrontTracingAutoConfigurationTests {
 
-	private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
-			.withConfiguration(AutoConfigurations.of(WavefrontTracingAutoConfiguration.class));
+	private final ApplicationContextRunner contextRunner = new ApplicationContextRunner().withConfiguration(
+			AutoConfigurations.of(WavefrontAutoConfiguration.class, WavefrontTracingAutoConfiguration.class));
 
 	@Test
 	void shouldSupplyBeans() {
@@ -53,136 +54,166 @@ class WavefrontTracingAutoConfigurationTests {
 			assertThat(context).hasSingleBean(WavefrontSpanHandler.class);
 			assertThat(context).hasSingleBean(SpanMetrics.class);
 			assertThat(context).hasSingleBean(WavefrontBraveSpanHandler.class);
-			assertThat(context).hasSingleBean(WavefrontOtelSpanHandler.class);
+			assertThat(context).hasSingleBean(WavefrontOtelSpanExporter.class);
 		});
 	}
 
 	@Test
 	void shouldNotSupplyBeansIfWavefrontSenderIsMissing() {
-		this.contextRunner.run((context) -> {
+		this.contextRunner.withClassLoader(new FilteredClassLoader(WavefrontSender.class)).run((context) -> {
 			assertThat(context).doesNotHaveBean(ApplicationTags.class);
 			assertThat(context).doesNotHaveBean(WavefrontSpanHandler.class);
 			assertThat(context).doesNotHaveBean(SpanMetrics.class);
 			assertThat(context).doesNotHaveBean(WavefrontBraveSpanHandler.class);
-			assertThat(context).doesNotHaveBean(WavefrontOtelSpanHandler.class);
+			assertThat(context).doesNotHaveBean(WavefrontOtelSpanExporter.class);
 		});
 	}
 
 	@Test
 	void shouldNotSupplyBeansIfMicrometerReporterWavefrontIsMissing() {
 		this.contextRunner.withClassLoader(new FilteredClassLoader("io.micrometer.tracing.reporter.wavefront"))
-				.withUserConfiguration(WavefrontSenderConfiguration.class).run((context) -> {
-					assertThat(context).doesNotHaveBean(WavefrontSpanHandler.class);
-					assertThat(context).doesNotHaveBean(SpanMetrics.class);
-					assertThat(context).doesNotHaveBean(WavefrontBraveSpanHandler.class);
-					assertThat(context).doesNotHaveBean(WavefrontOtelSpanHandler.class);
-				});
+			.withUserConfiguration(WavefrontSenderConfiguration.class)
+			.run((context) -> {
+				assertThat(context).doesNotHaveBean(WavefrontSpanHandler.class);
+				assertThat(context).doesNotHaveBean(SpanMetrics.class);
+				assertThat(context).doesNotHaveBean(WavefrontBraveSpanHandler.class);
+				assertThat(context).doesNotHaveBean(WavefrontOtelSpanExporter.class);
+			});
 	}
 
 	@Test
-	void shouldNotSupplyBeansIfTracingIsDisabled() {
+	void shouldNotSupplyBeansIfGlobalTracingIsDisabled() {
 		this.contextRunner.withPropertyValues("management.tracing.enabled=false")
-				.withUserConfiguration(WavefrontSenderConfiguration.class).run((context) -> {
-					assertThat(context).doesNotHaveBean(ApplicationTags.class);
-					assertThat(context).doesNotHaveBean(WavefrontSpanHandler.class);
-					assertThat(context).doesNotHaveBean(SpanMetrics.class);
-					assertThat(context).doesNotHaveBean(WavefrontBraveSpanHandler.class);
-					assertThat(context).doesNotHaveBean(WavefrontOtelSpanHandler.class);
-				});
+			.withUserConfiguration(WavefrontSenderConfiguration.class)
+			.run((context) -> {
+				assertThat(context).doesNotHaveBean(WavefrontSpanHandler.class);
+				assertThat(context).doesNotHaveBean(WavefrontBraveSpanHandler.class);
+				assertThat(context).doesNotHaveBean(WavefrontOtelSpanExporter.class);
+			});
+	}
+
+	@Test
+	void shouldNotSupplyBeansIfWavefrontTracingIsDisabled() {
+		this.contextRunner.withPropertyValues("management.wavefront.tracing.export.enabled=false")
+			.withUserConfiguration(WavefrontSenderConfiguration.class)
+			.run((context) -> {
+				assertThat(context).doesNotHaveBean(WavefrontSpanHandler.class);
+				assertThat(context).doesNotHaveBean(WavefrontBraveSpanHandler.class);
+				assertThat(context).doesNotHaveBean(WavefrontOtelSpanExporter.class);
+			});
 	}
 
 	@Test
 	void shouldSupplyMeterRegistrySpanMetricsIfMeterRegistryIsAvailable() {
 		this.contextRunner.withUserConfiguration(WavefrontSenderConfiguration.class, MeterRegistryConfiguration.class)
-				.run((context) -> {
-					assertThat(context).hasSingleBean(SpanMetrics.class);
-					assertThat(context).hasSingleBean(MeterRegistrySpanMetrics.class);
-				});
+			.run((context) -> {
+				assertThat(context).hasSingleBean(SpanMetrics.class);
+				assertThat(context).hasSingleBean(MeterRegistrySpanMetrics.class);
+			});
 	}
 
 	@Test
 	void shouldNotSupplyWavefrontBraveSpanHandlerIfBraveIsMissing() {
 		this.contextRunner.withClassLoader(new FilteredClassLoader("brave"))
-				.withUserConfiguration(WavefrontSenderConfiguration.class)
-				.run((context) -> assertThat(context).doesNotHaveBean(WavefrontBraveSpanHandler.class));
+			.withUserConfiguration(WavefrontSenderConfiguration.class)
+			.run((context) -> assertThat(context).doesNotHaveBean(WavefrontBraveSpanHandler.class));
 	}
 
 	@Test
-	void shouldNotSupplyWavefrontOtelSpanHandlerIfOtelIsMissing() {
+	void shouldNotSupplyWavefrontOtelSpanExporterIfOtelIsMissing() {
 		this.contextRunner.withClassLoader(new FilteredClassLoader("io.opentelemetry.sdk.trace"))
-				.withUserConfiguration(WavefrontSenderConfiguration.class)
-				.run((context) -> assertThat(context).doesNotHaveBean(WavefrontOtelSpanHandler.class));
+			.withUserConfiguration(WavefrontSenderConfiguration.class)
+			.run((context) -> assertThat(context).doesNotHaveBean(WavefrontOtelSpanExporter.class));
 	}
 
 	@Test
-	void shouldHaveADefaultApplicationName() {
+	void shouldHaveADefaultApplicationNameAndServiceName() {
 		this.contextRunner.withUserConfiguration(WavefrontSenderConfiguration.class).run((context) -> {
 			ApplicationTags applicationTags = context.getBean(ApplicationTags.class);
-			assertThat(applicationTags.getApplication()).isEqualTo("application");
+			assertThat(applicationTags.getApplication()).isEqualTo("unnamed_application");
+			assertThat(applicationTags.getService()).isEqualTo("unnamed_service");
+			assertThat(applicationTags.getCluster()).isNull();
+			assertThat(applicationTags.getShard()).isNull();
 		});
+	}
+
+	@Test
+	void shouldUseSpringApplicationNameForServiceName() {
+		this.contextRunner.withUserConfiguration(WavefrontSenderConfiguration.class)
+			.withPropertyValues("spring.application.name=super-service")
+			.run((context) -> {
+				ApplicationTags applicationTags = context.getBean(ApplicationTags.class);
+				assertThat(applicationTags.getApplication()).isEqualTo("unnamed_application");
+				assertThat(applicationTags.getService()).isEqualTo("super-service");
+			});
 	}
 
 	@Test
 	void shouldHonorConfigProperties() {
 		this.contextRunner.withUserConfiguration(WavefrontSenderConfiguration.class)
-				.withPropertyValues("spring.application.name=super-application",
-						"management.wavefront.tracing.service-name=super-service")
-				.run((context) -> {
-					ApplicationTags applicationTags = context.getBean(ApplicationTags.class);
-					assertThat(applicationTags.getApplication()).isEqualTo("super-application");
-					assertThat(applicationTags.getService()).isEqualTo("super-service");
-				});
+			.withPropertyValues("spring.application.name=ignored",
+					"management.wavefront.application.name=super-application",
+					"management.wavefront.application.service-name=super-service",
+					"management.wavefront.application.cluster-name=super-cluster",
+					"management.wavefront.application.shard-name=super-shard")
+			.run((context) -> {
+				ApplicationTags applicationTags = context.getBean(ApplicationTags.class);
+				assertThat(applicationTags.getApplication()).isEqualTo("super-application");
+				assertThat(applicationTags.getService()).isEqualTo("super-service");
+				assertThat(applicationTags.getCluster()).isEqualTo("super-cluster");
+				assertThat(applicationTags.getShard()).isEqualTo("super-shard");
+			});
 	}
 
 	@Test
 	void shouldBackOffOnCustomBeans() {
 		this.contextRunner.withUserConfiguration(WavefrontSenderConfiguration.class, CustomConfiguration.class)
-				.run((context) -> {
-					assertThat(context).hasBean("customApplicationTags");
-					assertThat(context).hasSingleBean(ApplicationTags.class);
-					assertThat(context).hasBean("customWavefrontSpanHandler");
-					assertThat(context).hasSingleBean(WavefrontSpanHandler.class);
-					assertThat(context).hasBean("customSpanMetrics");
-					assertThat(context).hasSingleBean(SpanMetrics.class);
-					assertThat(context).hasBean("customWavefrontBraveSpanHandler");
-					assertThat(context).hasSingleBean(WavefrontBraveSpanHandler.class);
-					assertThat(context).hasBean("customWavefrontOtelSpanHandler");
-					assertThat(context).hasSingleBean(WavefrontOtelSpanHandler.class);
-				});
+			.run((context) -> {
+				assertThat(context).hasBean("customApplicationTags");
+				assertThat(context).hasSingleBean(ApplicationTags.class);
+				assertThat(context).hasBean("customWavefrontSpanHandler");
+				assertThat(context).hasSingleBean(WavefrontSpanHandler.class);
+				assertThat(context).hasBean("customSpanMetrics");
+				assertThat(context).hasSingleBean(SpanMetrics.class);
+				assertThat(context).hasBean("customWavefrontBraveSpanHandler");
+				assertThat(context).hasSingleBean(WavefrontBraveSpanHandler.class);
+				assertThat(context).hasBean("customWavefrontOtelSpanExporter");
+				assertThat(context).hasSingleBean(WavefrontOtelSpanExporter.class);
+			});
 	}
 
 	@Configuration(proxyBeanMethods = false)
-	private static class CustomConfiguration {
+	private static final class CustomConfiguration {
 
 		@Bean
 		ApplicationTags customApplicationTags() {
-			return Mockito.mock(ApplicationTags.class);
+			return mock(ApplicationTags.class);
 		}
 
 		@Bean
 		WavefrontSpanHandler customWavefrontSpanHandler() {
-			return Mockito.mock(WavefrontSpanHandler.class);
+			return mock(WavefrontSpanHandler.class);
 		}
 
 		@Bean
 		SpanMetrics customSpanMetrics() {
-			return Mockito.mock(SpanMetrics.class);
+			return mock(SpanMetrics.class);
 		}
 
 		@Bean
 		WavefrontBraveSpanHandler customWavefrontBraveSpanHandler() {
-			return Mockito.mock(WavefrontBraveSpanHandler.class);
+			return mock(WavefrontBraveSpanHandler.class);
 		}
 
 		@Bean
-		WavefrontOtelSpanHandler customWavefrontOtelSpanHandler() {
-			return Mockito.mock(WavefrontOtelSpanHandler.class);
+		WavefrontOtelSpanExporter customWavefrontOtelSpanExporter() {
+			return mock(WavefrontOtelSpanExporter.class);
 		}
 
 	}
 
 	@Configuration(proxyBeanMethods = false)
-	private static class WavefrontSenderConfiguration {
+	private static final class WavefrontSenderConfiguration {
 
 		@Bean
 		WavefrontSender wavefrontSender() {
@@ -192,7 +223,7 @@ class WavefrontTracingAutoConfigurationTests {
 	}
 
 	@Configuration(proxyBeanMethods = false)
-	private static class MeterRegistryConfiguration {
+	private static final class MeterRegistryConfiguration {
 
 		@Bean
 		MeterRegistry meterRegistry() {

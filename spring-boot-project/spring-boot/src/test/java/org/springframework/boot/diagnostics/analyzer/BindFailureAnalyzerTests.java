@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -99,8 +99,21 @@ class BindFailureAnalyzerTests {
 						+ "org.springframework.boot.logging.LogLevel>]"));
 	}
 
+	@Test
+	void bindExceptionWithSuppressedMissingParametersException() {
+		BeanCreationException failure = createFailure(GenericFailureConfiguration.class, "test.foo.value=alpha");
+		failure.addSuppressed(new IllegalStateException(
+				"Missing parameter names. Ensure that the compiler uses the '-parameters' flag"));
+		FailureAnalysis analysis = new BindFailureAnalyzer().analyze(failure);
+		assertThat(analysis.getDescription())
+			.contains(failure("test.foo.value", "alpha", "\"test.foo.value\" from property source \"test\"",
+					"failed to convert java.lang.String to int"))
+			.contains(MissingParameterNamesFailureAnalyzer.POSSIBILITY);
+		assertThat(analysis.getAction()).contains(MissingParameterNamesFailureAnalyzer.ACTION);
+	}
+
 	private static String failure(String property, String value, String origin, String reason) {
-		return String.format("Property: %s%n    Value: %s%n    Origin: %s%n    Reason: %s", property, value, origin,
+		return String.format("Property: %s%n    Value: \"%s\"%n    Origin: %s%n    Reason: %s", property, value, origin,
 				reason);
 	}
 

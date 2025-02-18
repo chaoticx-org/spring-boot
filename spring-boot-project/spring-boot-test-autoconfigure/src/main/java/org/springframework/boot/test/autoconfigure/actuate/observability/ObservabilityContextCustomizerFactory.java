@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2023 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,6 +21,7 @@ import java.util.Objects;
 
 import org.springframework.boot.test.util.TestPropertyValues;
 import org.springframework.context.ConfigurableApplicationContext;
+import org.springframework.core.env.Environment;
 import org.springframework.test.context.ContextConfigurationAttributes;
 import org.springframework.test.context.ContextCustomizer;
 import org.springframework.test.context.ContextCustomizerFactory;
@@ -28,47 +29,59 @@ import org.springframework.test.context.MergedContextConfiguration;
 import org.springframework.test.context.TestContextAnnotationUtils;
 
 /**
- * {@link ContextCustomizerFactory} that globally disables metrics export unless
- * {@link AutoConfigureObservability} is set on the test class.
+ * {@link ContextCustomizerFactory} that globally disables metrics export and tracing in
+ * tests. The behaviour can be controlled with {@link AutoConfigureObservability} on the
+ * test class or via the {@value #AUTO_CONFIGURE_PROPERTY} property.
  *
  * @author Chris Bono
  * @author Moritz Halbritter
  */
 class ObservabilityContextCustomizerFactory implements ContextCustomizerFactory {
 
+	static final String AUTO_CONFIGURE_PROPERTY = "spring.test.observability.auto-configure";
+
 	@Override
 	public ContextCustomizer createContextCustomizer(Class<?> testClass,
 			List<ContextConfigurationAttributes> configAttributes) {
 		AutoConfigureObservability annotation = TestContextAnnotationUtils.findMergedAnnotation(testClass,
 				AutoConfigureObservability.class);
-		if (annotation == null) {
-			return new DisableObservabilityContextCustomizer(true, true);
-		}
-
-		return new DisableObservabilityContextCustomizer(!annotation.metrics(), !annotation.tracing());
+		return new DisableObservabilityContextCustomizer(annotation);
 	}
 
-	static class DisableObservabilityContextCustomizer implements ContextCustomizer {
+	private static class DisableObservabilityContextCustomizer implements ContextCustomizer {
 
-		private final boolean disableMetrics;
+		private final AutoConfigureObservability annotation;
 
-		private final boolean disableTracing;
-
-		DisableObservabilityContextCustomizer(boolean disableMetrics, boolean disableTracing) {
-			this.disableMetrics = disableMetrics;
-			this.disableTracing = disableTracing;
+		DisableObservabilityContextCustomizer(AutoConfigureObservability annotation) {
+			this.annotation = annotation;
 		}
 
 		@Override
 		public void customizeContext(ConfigurableApplicationContext context,
 				MergedContextConfiguration mergedContextConfiguration) {
-			if (this.disableMetrics) {
-				TestPropertyValues.of("management.defaults.metrics.export.enabled=false",
-						"management.simple.metrics.export.enabled=true").applyTo(context);
+			if (areMetricsDisabled(context.getEnvironment())) {
+				TestPropertyValues
+					.of("management.defaults.metrics.export.enabled=false",
+							"management.simple.metrics.export.enabled=true")
+					.applyTo(context);
 			}
-			if (this.disableTracing) {
+			if (isTracingDisabled(context.getEnvironment())) {
 				TestPropertyValues.of("management.tracing.enabled=false").applyTo(context);
 			}
+		}
+
+		private boolean areMetricsDisabled(Environment environment) {
+			if (this.annotation != null) {
+				return !this.annotation.metrics();
+			}
+			return !environment.getProperty(AUTO_CONFIGURE_PROPERTY, Boolean.class, false);
+		}
+
+		private boolean isTracingDisabled(Environment environment) {
+			if (this.annotation != null) {
+				return !this.annotation.tracing();
+			}
+			return !environment.getProperty(AUTO_CONFIGURE_PROPERTY, Boolean.class, false);
 		}
 
 		@Override
@@ -80,12 +93,12 @@ class ObservabilityContextCustomizerFactory implements ContextCustomizerFactory 
 				return false;
 			}
 			DisableObservabilityContextCustomizer that = (DisableObservabilityContextCustomizer) o;
-			return this.disableMetrics == that.disableMetrics && this.disableTracing == that.disableTracing;
+			return Objects.equals(this.annotation, that.annotation);
 		}
 
 		@Override
 		public int hashCode() {
-			return Objects.hash(this.disableMetrics, this.disableTracing);
+			return Objects.hash(this.annotation);
 		}
 
 	}

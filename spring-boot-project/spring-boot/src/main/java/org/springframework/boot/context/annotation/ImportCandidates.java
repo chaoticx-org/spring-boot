@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -37,6 +37,7 @@ import org.springframework.util.Assert;
  * candidates.
  *
  * @author Moritz Halbritter
+ * @author Scott Frederick
  * @since 2.7.0
  */
 public final class ImportCandidates implements Iterable<String> {
@@ -58,9 +59,16 @@ public final class ImportCandidates implements Iterable<String> {
 	}
 
 	/**
-	 * Loads the names of import candidates from the classpath.
-	 *
-	 * The names of the import candidates are stored in files named
+	 * Returns the list of loaded import candidates.
+	 * @return the list of import candidates
+	 */
+	public List<String> getCandidates() {
+		return this.candidates;
+	}
+
+	/**
+	 * Loads the names of import candidates from the classpath. The names of the import
+	 * candidates are stored in files named
 	 * {@code META-INF/spring/full-qualified-annotation-name.imports} on the classpath.
 	 * Every line contains the full qualified name of the candidate class. Comments are
 	 * supported using the # character.
@@ -73,12 +81,12 @@ public final class ImportCandidates implements Iterable<String> {
 		ClassLoader classLoaderToUse = decideClassloader(classLoader);
 		String location = String.format(LOCATION, annotation.getName());
 		Enumeration<URL> urls = findUrlsInClasspath(classLoaderToUse, location);
-		List<String> autoConfigurations = new ArrayList<>();
+		List<String> importCandidates = new ArrayList<>();
 		while (urls.hasMoreElements()) {
 			URL url = urls.nextElement();
-			autoConfigurations.addAll(readAutoConfigurations(url));
+			importCandidates.addAll(readCandidateConfigurations(url));
 		}
-		return new ImportCandidates(autoConfigurations);
+		return new ImportCandidates(importCandidates);
 	}
 
 	private static ClassLoader decideClassloader(ClassLoader classLoader) {
@@ -93,15 +101,14 @@ public final class ImportCandidates implements Iterable<String> {
 			return classLoader.getResources(location);
 		}
 		catch (IOException ex) {
-			throw new IllegalArgumentException("Failed to load autoconfigurations from location [" + location + "]",
-					ex);
+			throw new IllegalArgumentException("Failed to load configurations from location [" + location + "]", ex);
 		}
 	}
 
-	private static List<String> readAutoConfigurations(URL url) {
+	private static List<String> readCandidateConfigurations(URL url) {
 		try (BufferedReader reader = new BufferedReader(
 				new InputStreamReader(new UrlResource(url).getInputStream(), StandardCharsets.UTF_8))) {
-			List<String> autoConfigurations = new ArrayList<>();
+			List<String> candidates = new ArrayList<>();
 			String line;
 			while ((line = reader.readLine()) != null) {
 				line = stripComment(line);
@@ -109,12 +116,12 @@ public final class ImportCandidates implements Iterable<String> {
 				if (line.isEmpty()) {
 					continue;
 				}
-				autoConfigurations.add(line);
+				candidates.add(line);
 			}
-			return autoConfigurations;
+			return candidates;
 		}
 		catch (IOException ex) {
-			throw new IllegalArgumentException("Unable to load autoconfigurations from location [" + url + "]", ex);
+			throw new IllegalArgumentException("Unable to load configurations from location [" + url + "]", ex);
 		}
 	}
 

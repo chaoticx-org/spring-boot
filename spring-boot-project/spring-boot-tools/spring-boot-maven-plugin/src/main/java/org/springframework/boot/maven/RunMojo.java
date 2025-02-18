@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2023 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,11 +17,11 @@
 package org.springframework.boot.maven;
 
 import java.io.File;
-import java.lang.reflect.Method;
 import java.util.List;
 import java.util.Map;
 
 import org.apache.maven.plugin.MojoExecutionException;
+import org.apache.maven.plugin.MojoFailureException;
 import org.apache.maven.plugins.annotations.Execute;
 import org.apache.maven.plugins.annotations.LifecyclePhase;
 import org.apache.maven.plugins.annotations.Mojo;
@@ -42,7 +42,7 @@ import org.springframework.boot.loader.tools.RunProcess;
 @Mojo(name = "run", requiresProject = true, defaultPhase = LifecyclePhase.VALIDATE,
 		requiresDependencyResolution = ResolutionScope.TEST)
 @Execute(phase = LifecyclePhase.TEST_COMPILE)
-public class RunMojo extends AbstractApplicationRunMojo {
+public class RunMojo extends AbstractRunMojo {
 
 	/**
 	 * Whether the JVM's launch should be optimized.
@@ -51,47 +51,34 @@ public class RunMojo extends AbstractApplicationRunMojo {
 	@Parameter(property = "spring-boot.run.optimizedLaunch", defaultValue = "true")
 	private boolean optimizedLaunch;
 
+	/**
+	 * Flag to include the test classpath when running.
+	 * @since 1.3.0
+	 */
+	@Parameter(property = "spring-boot.run.useTestClasspath", defaultValue = "false")
+	private Boolean useTestClasspath;
+
 	@Override
 	protected RunArguments resolveJvmArguments() {
 		RunArguments jvmArguments = super.resolveJvmArguments();
 		if (this.optimizedLaunch) {
 			jvmArguments.getArgs().addFirst("-XX:TieredStopAtLevel=1");
-			if (!isJava13OrLater()) {
-				jvmArguments.getArgs().addFirst("-Xverify:none");
-			}
 		}
 		return jvmArguments;
 	}
 
-	private boolean isJava13OrLater() {
-		for (Method method : String.class.getMethods()) {
-			if (method.getName().equals("stripIndent")) {
-				return true;
-			}
-		}
-		return false;
+	@Override
+	protected void run(JavaProcessExecutor processExecutor, File workingDirectory, List<String> args,
+			Map<String, String> environmentVariables) throws MojoExecutionException, MojoFailureException {
+		processExecutor
+			.withRunProcessCustomizer(
+					(runProcess) -> Runtime.getRuntime().addShutdownHook(new Thread(new RunProcessKiller(runProcess))))
+			.run(workingDirectory, args, environmentVariables);
 	}
 
 	@Override
-	protected void run(File workingDirectory, List<String> args, Map<String, String> environmentVariables)
-			throws MojoExecutionException {
-		int exitCode = forkJvm(workingDirectory, args, environmentVariables);
-		if (hasTerminatedSuccessfully(exitCode)) {
-			return;
-		}
-		throw new MojoExecutionException("Application finished with exit code: " + exitCode);
-	}
-
-	private int forkJvm(File workingDirectory, List<String> args, Map<String, String> environmentVariables)
-			throws MojoExecutionException {
-		try {
-			RunProcess runProcess = new RunProcess(workingDirectory, getJavaExecutable());
-			Runtime.getRuntime().addShutdownHook(new Thread(new RunProcessKiller(runProcess)));
-			return runProcess.run(true, args, environmentVariables);
-		}
-		catch (Exception ex) {
-			throw new MojoExecutionException("Could not exec java", ex);
-		}
+	protected boolean isUseTestClasspath() {
+		return this.useTestClasspath;
 	}
 
 	private static final class RunProcessKiller implements Runnable {

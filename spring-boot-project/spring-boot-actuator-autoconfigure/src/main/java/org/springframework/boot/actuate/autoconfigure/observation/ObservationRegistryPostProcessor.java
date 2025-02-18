@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2023 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,7 +16,8 @@
 
 package org.springframework.boot.actuate.autoconfigure.observation;
 
-import io.micrometer.observation.Observation.GlobalKeyValuesProvider;
+import io.micrometer.observation.GlobalObservationConvention;
+import io.micrometer.observation.ObservationFilter;
 import io.micrometer.observation.ObservationHandler;
 import io.micrometer.observation.ObservationPredicate;
 import io.micrometer.observation.ObservationRegistry;
@@ -38,30 +39,34 @@ class ObservationRegistryPostProcessor implements BeanPostProcessor {
 
 	private final ObjectProvider<ObservationPredicate> observationPredicates;
 
-	private final ObjectProvider<GlobalKeyValuesProvider<?>> keyValuesProviders;
+	private final ObjectProvider<GlobalObservationConvention<?>> observationConventions;
 
 	private final ObjectProvider<ObservationHandler<?>> observationHandlers;
 
 	private final ObjectProvider<ObservationHandlerGrouping> observationHandlerGrouping;
 
+	private final ObjectProvider<ObservationFilter> observationFilters;
+
 	private volatile ObservationRegistryConfigurer configurer;
 
 	ObservationRegistryPostProcessor(ObjectProvider<ObservationRegistryCustomizer<?>> observationRegistryCustomizers,
 			ObjectProvider<ObservationPredicate> observationPredicates,
-			ObjectProvider<GlobalKeyValuesProvider<?>> keyValuesProviders,
+			ObjectProvider<GlobalObservationConvention<?>> observationConventions,
 			ObjectProvider<ObservationHandler<?>> observationHandlers,
-			ObjectProvider<ObservationHandlerGrouping> observationHandlerGrouping) {
+			ObjectProvider<ObservationHandlerGrouping> observationHandlerGrouping,
+			ObjectProvider<ObservationFilter> observationFilters) {
 		this.observationRegistryCustomizers = observationRegistryCustomizers;
 		this.observationPredicates = observationPredicates;
-		this.keyValuesProviders = keyValuesProviders;
+		this.observationConventions = observationConventions;
 		this.observationHandlers = observationHandlers;
 		this.observationHandlerGrouping = observationHandlerGrouping;
+		this.observationFilters = observationFilters;
 	}
 
 	@Override
 	public Object postProcessAfterInitialization(Object bean, String beanName) throws BeansException {
-		if (bean instanceof ObservationRegistry) {
-			getConfigurer().configure((ObservationRegistry) bean);
+		if (bean instanceof ObservationRegistry registry) {
+			getConfigurer().configure(registry);
 		}
 		return bean;
 	}
@@ -69,8 +74,8 @@ class ObservationRegistryPostProcessor implements BeanPostProcessor {
 	private ObservationRegistryConfigurer getConfigurer() {
 		if (this.configurer == null) {
 			this.configurer = new ObservationRegistryConfigurer(this.observationRegistryCustomizers,
-					this.observationPredicates, this.keyValuesProviders, this.observationHandlers,
-					this.observationHandlerGrouping);
+					this.observationPredicates, this.observationConventions, this.observationHandlers,
+					this.observationHandlerGrouping, this.observationFilters);
 		}
 		return this.configurer;
 	}

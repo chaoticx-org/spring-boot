@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,25 +16,18 @@
 
 package org.springframework.boot.actuate.autoconfigure.tracing;
 
-import org.springframework.boot.actuate.autoconfigure.tracing.OpenTelemetryConfigurations.MicrometerConfiguration;
-import org.springframework.boot.actuate.autoconfigure.tracing.OpenTelemetryConfigurations.SdkConfiguration;
-import org.springframework.boot.actuate.autoconfigure.tracing.OpenTelemetryConfigurations.TracerConfiguration;
-import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
-import org.springframework.context.annotation.Import;
 
 /**
- * {@link EnableAutoConfiguration Auto-configuration} for OpenTelemetry.
- *
- * It uses imports on {@link OpenTelemetryConfigurations} to guarantee the correct
- * configuration ordering.
+ * {@link EnableAutoConfiguration Auto-configuration} for OpenTelemetry tracing.
  *
  * @author Moritz Halbritter
+ * @author Marcin Grzejszczak
+ * @author Yanming Zhou
  * @since 3.0.0
+ * @deprecated since 3.4.0 in favor of {@link OpenTelemetryTracingAutoConfiguration}
  */
-@AutoConfiguration(before = MicrometerTracingAutoConfiguration.class)
-@Import({ SdkConfiguration.class, TracerConfiguration.class, MicrometerConfiguration.class })
-@ConditionalOnEnabledTracing
+@Deprecated(since = "3.4.0", forRemoval = true)
 public class OpenTelemetryAutoConfiguration {
 
 }

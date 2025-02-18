@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2021 the original author or authors.
+ * Copyright 2012-2025 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,6 +32,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import org.springframework.boot.buildpack.platform.json.SharedObjectMapper;
 import org.springframework.util.Assert;
+import org.springframework.util.CollectionUtils;
 import org.springframework.util.StreamUtils;
 import org.springframework.util.StringUtils;
 
@@ -48,9 +49,10 @@ public class ContainerConfig {
 	private final String json;
 
 	ContainerConfig(String user, ImageReference image, String command, List<String> args, Map<String, String> labels,
-			List<Binding> bindings, Map<String, String> env, String networkMode) throws IOException {
-		Assert.notNull(image, "Image must not be null");
-		Assert.hasText(command, "Command must not be empty");
+			List<Binding> bindings, Map<String, String> env, String networkMode, List<String> securityOptions)
+			throws IOException {
+		Assert.notNull(image, "'image' must not be null");
+		Assert.hasText(command, "'command' must not be empty");
 		ObjectMapper objectMapper = SharedObjectMapper.get();
 		ObjectNode node = objectMapper.createObjectNode();
 		if (StringUtils.hasText(user)) {
@@ -70,6 +72,10 @@ public class ContainerConfig {
 		}
 		ArrayNode bindsNode = hostConfigNode.putArray("Binds");
 		bindings.forEach((binding) -> bindsNode.add(binding.toString()));
+		if (!CollectionUtils.isEmpty(securityOptions)) {
+			ArrayNode securityOptsNode = hostConfigNode.putArray("SecurityOpt");
+			securityOptions.forEach(securityOptsNode::add);
+		}
 		this.json = objectMapper.writeValueAsString(node);
 	}
 
@@ -94,8 +100,8 @@ public class ContainerConfig {
 	 * @return a new {@link ContainerConfig} instance
 	 */
 	public static ContainerConfig of(ImageReference imageReference, Consumer<Update> update) {
-		Assert.notNull(imageReference, "ImageReference must not be null");
-		Assert.notNull(update, "Update must not be null");
+		Assert.notNull(imageReference, "'imageReference' must not be null");
+		Assert.notNull(update, "'update' must not be null");
 		return new Update(imageReference).run(update);
 	}
 
@@ -120,6 +126,8 @@ public class ContainerConfig {
 
 		private String networkMode;
 
+		private final List<String> securityOptions = new ArrayList<>();
+
 		Update(ImageReference image) {
 			this.image = image;
 		}
@@ -128,7 +136,7 @@ public class ContainerConfig {
 			update.accept(this);
 			try {
 				return new ContainerConfig(this.user, this.image, this.command, this.args, this.labels, this.bindings,
-						this.env, this.networkMode);
+						this.env, this.networkMode, this.securityOptions);
 			}
 			catch (IOException ex) {
 				throw new IllegalStateException(ex);
@@ -195,6 +203,14 @@ public class ContainerConfig {
 		 */
 		public void withNetworkMode(String networkMode) {
 			this.networkMode = networkMode;
+		}
+
+		/**
+		 * Update the container config with a security option.
+		 * @param option the security option
+		 */
+		public void withSecurityOption(String option) {
+			this.securityOptions.add(option);
 		}
 
 	}

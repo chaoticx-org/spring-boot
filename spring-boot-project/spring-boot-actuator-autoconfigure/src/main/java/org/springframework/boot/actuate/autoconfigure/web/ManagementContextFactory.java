@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2023 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,6 +28,8 @@ import org.springframework.boot.web.server.WebServerFactory;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.annotation.AnnotationConfigRegistry;
+import org.springframework.core.env.ConfigurableEnvironment;
+import org.springframework.core.env.Environment;
 
 /**
  * Factory for creating a separate management context when the management web server is
@@ -45,7 +47,7 @@ public final class ManagementContextFactory {
 
 	private final Class<? extends WebServerFactory> webServerFactoryClass;
 
-	private Class<?>[] autoConfigurationClasses;
+	private final Class<?>[] autoConfigurationClasses;
 
 	public ManagementContextFactory(WebApplicationType webApplicationType,
 			Class<? extends WebServerFactory> webServerFactoryClass, Class<?>... autoConfigurationClasses) {
@@ -55,8 +57,15 @@ public final class ManagementContextFactory {
 	}
 
 	public ConfigurableApplicationContext createManagementContext(ApplicationContext parentContext) {
+		Environment parentEnvironment = parentContext.getEnvironment();
+		ConfigurableEnvironment childEnvironment = ApplicationContextFactory.DEFAULT
+			.createEnvironment(this.webApplicationType);
+		if (parentEnvironment instanceof ConfigurableEnvironment configurableEnvironment) {
+			childEnvironment.setConversionService((configurableEnvironment).getConversionService());
+		}
 		ConfigurableApplicationContext managementContext = ApplicationContextFactory.DEFAULT
-				.create(this.webApplicationType);
+			.create(this.webApplicationType);
+		managementContext.setEnvironment(childEnvironment);
 		managementContext.setParent(parentContext);
 		return managementContext;
 	}

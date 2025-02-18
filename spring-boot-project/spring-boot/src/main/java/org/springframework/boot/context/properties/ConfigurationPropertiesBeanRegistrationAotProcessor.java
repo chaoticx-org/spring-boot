@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2023 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@
 
 package org.springframework.boot.context.properties;
 
-import java.lang.reflect.Executable;
+import java.util.function.Predicate;
 
 import javax.lang.model.element.Modifier;
 
@@ -27,10 +27,13 @@ import org.springframework.beans.factory.aot.BeanRegistrationAotContribution;
 import org.springframework.beans.factory.aot.BeanRegistrationAotProcessor;
 import org.springframework.beans.factory.aot.BeanRegistrationCode;
 import org.springframework.beans.factory.aot.BeanRegistrationCodeFragments;
+import org.springframework.beans.factory.aot.BeanRegistrationCodeFragmentsDecorator;
 import org.springframework.beans.factory.config.BeanDefinition;
 import org.springframework.beans.factory.support.InstanceSupplier;
 import org.springframework.beans.factory.support.RegisteredBean;
-import org.springframework.boot.context.properties.ConfigurationPropertiesBean.BindMethod;
+import org.springframework.beans.factory.support.RootBeanDefinition;
+import org.springframework.boot.context.properties.bind.BindMethod;
+import org.springframework.javapoet.ClassName;
 import org.springframework.javapoet.CodeBlock;
 
 /**
@@ -46,18 +49,18 @@ class ConfigurationPropertiesBeanRegistrationAotProcessor implements BeanRegistr
 		if (!isImmutableConfigurationPropertiesBeanDefinition(registeredBean.getMergedBeanDefinition())) {
 			return null;
 		}
-		return BeanRegistrationAotContribution.ofBeanRegistrationCodeFragmentsCustomizer(
+		return BeanRegistrationAotContribution.withCustomCodeFragments(
 				(codeFragments) -> new ConfigurationPropertiesBeanRegistrationCodeFragments(codeFragments,
 						registeredBean));
 
 	}
 
 	private boolean isImmutableConfigurationPropertiesBeanDefinition(BeanDefinition beanDefinition) {
-		return beanDefinition.hasAttribute(BindMethod.class.getName())
-				&& BindMethod.VALUE_OBJECT.equals(beanDefinition.getAttribute(BindMethod.class.getName()));
+		return BindMethod.VALUE_OBJECT.equals(BindMethodAttribute.get(beanDefinition));
 	}
 
-	private static class ConfigurationPropertiesBeanRegistrationCodeFragments extends BeanRegistrationCodeFragments {
+	private static class ConfigurationPropertiesBeanRegistrationCodeFragments
+			extends BeanRegistrationCodeFragmentsDecorator {
 
 		private static final String REGISTERED_BEAN_PARAMETER_NAME = "registeredBean";
 
@@ -70,24 +73,35 @@ class ConfigurationPropertiesBeanRegistrationAotProcessor implements BeanRegistr
 		}
 
 		@Override
+		public CodeBlock generateSetBeanDefinitionPropertiesCode(GenerationContext generationContext,
+				BeanRegistrationCode beanRegistrationCode, RootBeanDefinition beanDefinition,
+				Predicate<String> attributeFilter) {
+			return super.generateSetBeanDefinitionPropertiesCode(generationContext, beanRegistrationCode,
+					beanDefinition, attributeFilter.or(BindMethodAttribute.NAME::equals));
+		}
+
+		@Override
+		public ClassName getTarget(RegisteredBean registeredBean) {
+			return ClassName.get(this.registeredBean.getBeanClass());
+		}
+
+		@Override
 		public CodeBlock generateInstanceSupplierCode(GenerationContext generationContext,
-				BeanRegistrationCode beanRegistrationCode, Executable constructorOrFactoryMethod,
-				boolean allowDirectSupplierShortcut) {
-			GeneratedMethod method = beanRegistrationCode.getMethodGenerator().generateMethod("get", "instance")
-					.using((builder) -> {
-						Class<?> beanClass = this.registeredBean.getBeanClass();
-						builder.addJavadoc("Get the bean instance for '$L'.", this.registeredBean.getBeanName());
-						builder.addModifiers(Modifier.PRIVATE, Modifier.STATIC);
-						builder.returns(beanClass);
-						builder.addParameter(RegisteredBean.class, REGISTERED_BEAN_PARAMETER_NAME);
-						builder.addStatement("$T beanFactory = registeredBean.getBeanFactory()", BeanFactory.class);
-						builder.addStatement("$T beanName = registeredBean.getBeanName()", String.class);
-						builder.addStatement("$T<?> beanClass = registeredBean.getBeanClass()", Class.class);
-						builder.addStatement("return ($T) $T.from(beanFactory, beanName, beanClass)", beanClass,
-								ConstructorBound.class);
-					});
+				BeanRegistrationCode beanRegistrationCode, boolean allowDirectSupplierShortcut) {
+			GeneratedMethod generatedMethod = beanRegistrationCode.getMethods().add("getInstance", (method) -> {
+				Class<?> beanClass = this.registeredBean.getBeanClass();
+				method.addJavadoc("Get the bean instance for '$L'.", this.registeredBean.getBeanName())
+					.addModifiers(Modifier.PRIVATE, Modifier.STATIC)
+					.returns(beanClass)
+					.addParameter(RegisteredBean.class, REGISTERED_BEAN_PARAMETER_NAME)
+					.addStatement("$T beanFactory = registeredBean.getBeanFactory()", BeanFactory.class)
+					.addStatement("$T beanName = registeredBean.getBeanName()", String.class)
+					.addStatement("$T<?> beanClass = registeredBean.getBeanClass()", Class.class)
+					.addStatement("return ($T) $T.from(beanFactory, beanName, beanClass)", beanClass,
+							ConstructorBound.class);
+			});
 			return CodeBlock.of("$T.of($T::$L)", InstanceSupplier.class, beanRegistrationCode.getClassName(),
-					method.getName());
+					generatedMethod.getName());
 		}
 
 	}

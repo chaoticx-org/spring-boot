@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2025 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -76,8 +76,8 @@ public class ClassPathChangeUploader implements ApplicationListener<ClassPathCha
 	private final ClientHttpRequestFactory requestFactory;
 
 	public ClassPathChangeUploader(String url, ClientHttpRequestFactory requestFactory) {
-		Assert.hasLength(url, "URL must not be empty");
-		Assert.notNull(requestFactory, "RequestFactory must not be null");
+		Assert.hasLength(url, "'url' must not be empty");
+		Assert.notNull(requestFactory, "'requestFactory' must not be null");
 		try {
 			this.uri = new URL(url).toURI();
 		}
@@ -92,14 +92,14 @@ public class ClassPathChangeUploader implements ApplicationListener<ClassPathCha
 		try {
 			ClassLoaderFiles classLoaderFiles = getClassLoaderFiles(event);
 			byte[] bytes = serialize(classLoaderFiles);
-			performUpload(classLoaderFiles, bytes);
+			performUpload(bytes, event);
 		}
 		catch (IOException ex) {
 			throw new IllegalStateException(ex);
 		}
 	}
 
-	private void performUpload(ClassLoaderFiles classLoaderFiles, byte[] bytes) throws IOException {
+	private void performUpload(byte[] bytes, ClassPathChangedEvent event) throws IOException {
 		try {
 			while (true) {
 				try {
@@ -108,11 +108,12 @@ public class ClassPathChangeUploader implements ApplicationListener<ClassPathCha
 					headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
 					headers.setContentLength(bytes.length);
 					FileCopyUtils.copy(bytes, request.getBody());
-					ClientHttpResponse response = request.execute();
-					HttpStatusCode statusCode = response.getStatusCode();
-					Assert.state(statusCode == HttpStatus.OK,
-							() -> "Unexpected " + statusCode + " response uploading class files");
-					logUpload(classLoaderFiles);
+					logUpload(event);
+					try (ClientHttpResponse response = request.execute()) {
+						HttpStatusCode statusCode = response.getStatusCode();
+						Assert.state(statusCode == HttpStatus.OK,
+								() -> "Unexpected " + statusCode + " response uploading class files");
+					}
 					return;
 				}
 				catch (SocketException ex) {
@@ -129,9 +130,8 @@ public class ClassPathChangeUploader implements ApplicationListener<ClassPathCha
 		}
 	}
 
-	private void logUpload(ClassLoaderFiles classLoaderFiles) {
-		int size = classLoaderFiles.size();
-		logger.info(LogMessage.format("Uploaded %s class %s", size, (size != 1) ? "resources" : "resource"));
+	private void logUpload(ClassPathChangedEvent event) {
+		logger.info(LogMessage.format("Uploading %s", event.overview()));
 	}
 
 	private byte[] serialize(ClassLoaderFiles classLoaderFiles) throws IOException {

@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,7 +22,10 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
+import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configurers.CsrfConfigurer;
+import org.springframework.security.config.annotation.web.configurers.HeadersConfigurer.FrameOptionsConfig;
 import org.springframework.security.web.SecurityFilterChain;
 
 @Profile("dev")
@@ -32,13 +35,18 @@ public class DevProfileSecurityConfiguration {
 	@Bean
 	@Order(Ordered.HIGHEST_PRECEDENCE)
 	SecurityFilterChain h2ConsoleSecurityFilterChain(HttpSecurity http) throws Exception {
-		// @formatter:off
-		return http.requestMatcher(PathRequest.toH2Console())
-				// ... configuration for authorization
-				.csrf().disable()
-				.headers().frameOptions().sameOrigin().and()
-				.build();
-		// @formatter:on
+		http.securityMatcher(PathRequest.toH2Console());
+		http.authorizeHttpRequests(yourCustomAuthorization());
+		http.csrf(CsrfConfigurer::disable);
+		http.headers((headers) -> headers.frameOptions(FrameOptionsConfig::sameOrigin));
+		return http.build();
 	}
+
+	// tag::customizer[]
+	<T> Customizer<T> yourCustomAuthorization() {
+		return (t) -> {
+		};
+	}
+	// end::customizer[]
 
 }

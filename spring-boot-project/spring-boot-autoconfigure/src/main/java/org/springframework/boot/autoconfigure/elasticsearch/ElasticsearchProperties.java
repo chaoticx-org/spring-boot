@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,7 +22,6 @@ import java.util.Collections;
 import java.util.List;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.util.unit.DataSize;
 
 /**
  * Configuration properties for Elasticsearch.
@@ -34,7 +33,7 @@ import org.springframework.util.unit.DataSize;
 public class ElasticsearchProperties {
 
 	/**
-	 * Comma-separated list of the Elasticsearch instances to use.
+	 * List of the Elasticsearch instances to use.
 	 */
 	private List<String> uris = new ArrayList<>(Collections.singletonList("http://localhost:9200"));
 
@@ -59,13 +58,16 @@ public class ElasticsearchProperties {
 	private Duration socketTimeout = Duration.ofSeconds(30);
 
 	/**
+	 * Whether to enable socket keep alive between client and Elasticsearch.
+	 */
+	private boolean socketKeepAlive = false;
+
+	/**
 	 * Prefix added to the path of every request sent to Elasticsearch.
 	 */
 	private String pathPrefix;
 
 	private final Restclient restclient = new Restclient();
-
-	private final Webclient webclient = new Webclient();
 
 	public List<String> getUris() {
 		return this.uris;
@@ -107,6 +109,14 @@ public class ElasticsearchProperties {
 		this.socketTimeout = socketTimeout;
 	}
 
+	public boolean isSocketKeepAlive() {
+		return this.socketKeepAlive;
+	}
+
+	public void setSocketKeepAlive(boolean socketKeepAlive) {
+		this.socketKeepAlive = socketKeepAlive;
+	}
+
 	public String getPathPrefix() {
 		return this.pathPrefix;
 	}
@@ -119,16 +129,18 @@ public class ElasticsearchProperties {
 		return this.restclient;
 	}
 
-	public Webclient getWebclient() {
-		return this.webclient;
-	}
-
 	public static class Restclient {
 
 		private final Sniffer sniffer = new Sniffer();
 
+		private final Ssl ssl = new Ssl();
+
 		public Sniffer getSniffer() {
 			return this.sniffer;
+		}
+
+		public Ssl getSsl() {
+			return this.ssl;
 		}
 
 		public static class Sniffer {
@@ -161,22 +173,21 @@ public class ElasticsearchProperties {
 
 		}
 
-	}
+		public static class Ssl {
 
-	public static class Webclient {
+			/**
+			 * SSL bundle name.
+			 */
+			private String bundle;
 
-		/**
-		 * Limit on the number of bytes that can be buffered whenever the input stream
-		 * needs to be aggregated.
-		 */
-		private DataSize maxInMemorySize;
+			public String getBundle() {
+				return this.bundle;
+			}
 
-		public DataSize getMaxInMemorySize() {
-			return this.maxInMemorySize;
-		}
+			public void setBundle(String bundle) {
+				this.bundle = bundle;
+			}
 
-		public void setMaxInMemorySize(DataSize maxInMemorySize) {
-			this.maxInMemorySize = maxInMemorySize;
 		}
 
 	}
