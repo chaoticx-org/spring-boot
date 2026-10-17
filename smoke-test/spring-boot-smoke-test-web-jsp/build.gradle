@@ -1,0 +1,30 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id "war"
+}
+
+description = "Spring Boot web JSP smoke test"
+
+configurations {
+	providedRuntime {
+		extendsFrom dependencyManagement
+	}
+}
+
+dependencies {
+	implementation(project(":starter:spring-boot-starter-webmvc"))
+
+	providedRuntime(project(":starter:spring-boot-starter-tomcat-runtime"))
+	providedRuntime("org.apache.tomcat.embed:tomcat-embed-jasper")
+	providedRuntime("org.glassfish.web:jakarta.servlet.jsp.jstl")
+
+	testImplementation(project(":starter:spring-boot-starter-webmvc-test"))
+	testImplementation(project(":module:spring-boot-restclient"))
+}
+
+tasks.named("compileTestJava") {
+	options.nullability.checking = "tests"
+}

@@ -1,0 +1,18 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id 'org.springframework.boot' version '{version}' apply false
+}
+
+version = '0.1.0'
+
+tasks.register("buildInfo", org.springframework.boot.gradle.tasks.buildinfo.BuildInfo) {
+	properties {
+		artifact = 'foo'
+		group = 'foo'
+		name = 'foo'
+		additional = ['additional': 'foo']
+	}
+}

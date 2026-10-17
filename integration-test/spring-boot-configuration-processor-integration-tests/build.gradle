@@ -1,0 +1,20 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id "java"
+}
+
+description = "Spring Boot Configuration Processor Integration Tests"
+
+dependencies {
+	annotationProcessor(project(":configuration-metadata:spring-boot-configuration-processor"))
+
+	implementation(enforcedPlatform(project(":platform:spring-boot-dependencies")))
+	implementation(project(":core:spring-boot"))
+	implementation("jakarta.validation:jakarta.validation-api")
+
+	testImplementation(project(":starter:spring-boot-starter-test"))
+	testImplementation(project(":configuration-metadata:spring-boot-configuration-metadata"))
+}

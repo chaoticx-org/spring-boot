@@ -1,0 +1,92 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+package org.springframework.boot.data.metrics;
+
+import java.io.IOException;
+import java.lang.reflect.Method;
+
+import io.micrometer.core.instrument.Tag;
+import org.jspecify.annotations.Nullable;
+import org.junit.jupiter.api.Test;
+
+import org.springframework.data.repository.Repository;
+import org.springframework.data.repository.core.support.RepositoryMethodInvocationListener.RepositoryMethodInvocation;
+import org.springframework.data.repository.core.support.RepositoryMethodInvocationListener.RepositoryMethodInvocationResult;
+import org.springframework.data.repository.core.support.RepositoryMethodInvocationListener.RepositoryMethodInvocationResult.State;
+import org.springframework.util.ReflectionUtils;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.mock;
+
+/**
+ * Tests for {@link DefaultRepositoryTagsProvider}.
+ *
+ * @author Phillip Webb
+ */
+class DefaultRepositoryTagsProviderTests {
+
+	private final DefaultRepositoryTagsProvider provider = new DefaultRepositoryTagsProvider();
+
+	@Test
+	void repositoryTagsIncludesRepository() {
+		RepositoryMethodInvocation invocation = createInvocation();
+		Iterable<Tag> tags = this.provider.repositoryTags(invocation);
+		assertThat(tags).contains(Tag.of("repository", "ExampleRepository"));
+	}
+
+	@Test
+	void repositoryTagsIncludesMethod() {
+		RepositoryMethodInvocation invocation = createInvocation();
+		Iterable<Tag> tags = this.provider.repositoryTags(invocation);
+		assertThat(tags).contains(Tag.of("method", "findById"));
+	}
+
+	@Test
+	void repositoryTagsIncludesState() {
+		RepositoryMethodInvocation invocation = createInvocation();
+		Iterable<Tag> tags = this.provider.repositoryTags(invocation);
+		assertThat(tags).contains(Tag.of("state", "SUCCESS"));
+	}
+
+	@Test
+	void repositoryTagsIncludesException() {
+		RepositoryMethodInvocation invocation = createInvocation(new IOException());
+		Iterable<Tag> tags = this.provider.repositoryTags(invocation);
+		assertThat(tags).contains(Tag.of("exception", "IOException"));
+	}
+
+	@Test
+	void repositoryTagsWhenNoExceptionIncludesExceptionTagWithNone() {
+		RepositoryMethodInvocation invocation = createInvocation();
+		Iterable<Tag> tags = this.provider.repositoryTags(invocation);
+		assertThat(tags).contains(Tag.of("exception", "None"));
+	}
+
+	private RepositoryMethodInvocation createInvocation() {
+		return createInvocation(null);
+	}
+
+	private RepositoryMethodInvocation createInvocation(@Nullable Throwable error) {
+		Class<?> repositoryInterface = ExampleRepository.class;
+		Method method = ReflectionUtils.findMethod(repositoryInterface, "findById", long.class);
+		assertThat(method).isNotNull();
+		RepositoryMethodInvocationResult result = mock(RepositoryMethodInvocationResult.class);
+		given(result.getState()).willReturn((error != null) ? State.ERROR : State.SUCCESS);
+		given(result.getError()).willReturn(error);
+		return new RepositoryMethodInvocation(repositoryInterface, method, result, 0);
+	}
+
+	interface ExampleRepository extends Repository<Example, Long> {
+
+		Example findById(long id);
+
+	}
+
+	static class Example {
+
+	}
+
+}

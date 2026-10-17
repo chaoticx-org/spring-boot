@@ -1,0 +1,171 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+package org.springframework.boot.loader.tools;
+
+import java.io.File;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Locale;
+import java.util.Map;
+
+import org.jspecify.annotations.Nullable;
+
+import org.springframework.util.Assert;
+
+/**
+ * Common {@link Layout layouts}.
+ *
+ * @author Phillip Webb
+ * @author Dave Syer
+ * @author Andy Wilkinson
+ * @author Madhura Bhave
+ * @author Scott Frederick
+ * @since 1.0.0
+ */
+public final class Layouts {
+
+	private Layouts() {
+	}
+
+	/**
+	 * Return a layout for the given source file.
+	 * @param file the source file
+	 * @return a {@link Layout}
+	 */
+	public static Layout forFile(File file) {
+		Assert.notNull(file, "'file' must not be null");
+		String lowerCaseFileName = file.getName().toLowerCase(Locale.ENGLISH);
+		if (lowerCaseFileName.endsWith(".jar")) {
+			return new Jar();
+		}
+		if (lowerCaseFileName.endsWith(".war")) {
+			return new War();
+		}
+		if (file.isDirectory() || lowerCaseFileName.endsWith(".zip")) {
+			return new Expanded();
+		}
+		throw new IllegalStateException("Unable to deduce layout for '" + file + "'");
+	}
+
+	/**
+	 * Executable JAR layout.
+	 */
+	public static class Jar implements RepackagingLayout {
+
+		@Override
+		public @Nullable String getLauncherClassName() {
+			return "org.springframework.boot.loader.launch.JarLauncher";
+		}
+
+		@Override
+		public String getLibraryLocation(String libraryName, @Nullable LibraryScope scope) {
+			return "BOOT-INF/lib/";
+		}
+
+		@Override
+		public String getClassesLocation() {
+			return "";
+		}
+
+		@Override
+		public String getRepackagedClassesLocation() {
+			return "BOOT-INF/classes/";
+		}
+
+		@Override
+		public String getClasspathIndexFileLocation() {
+			return "BOOT-INF/classpath.idx";
+		}
+
+		@Override
+		public String getLayersIndexFileLocation() {
+			return "BOOT-INF/layers.idx";
+		}
+
+		@Override
+		public boolean isExecutable() {
+			return true;
+		}
+
+	}
+
+	/**
+	 * Executable expanded archive layout.
+	 */
+	public static class Expanded extends Jar {
+
+		@Override
+		public String getLauncherClassName() {
+			return "org.springframework.boot.loader.launch.PropertiesLauncher";
+		}
+
+	}
+
+	/**
+	 * No layout.
+	 */
+	public static class None extends Jar {
+
+		@Override
+		public @Nullable String getLauncherClassName() {
+			return null;
+		}
+
+		@Override
+		public boolean isExecutable() {
+			return false;
+		}
+
+	}
+
+	/**
+	 * Executable WAR layout.
+	 */
+	public static class War implements Layout {
+
+		private static final Map<LibraryScope, String> SCOPE_LOCATION;
+
+		static {
+			Map<LibraryScope, String> locations = new HashMap<>();
+			locations.put(LibraryScope.COMPILE, "WEB-INF/lib/");
+			locations.put(LibraryScope.CUSTOM, "WEB-INF/lib/");
+			locations.put(LibraryScope.RUNTIME, "WEB-INF/lib/");
+			locations.put(LibraryScope.PROVIDED, "WEB-INF/lib-provided/");
+			SCOPE_LOCATION = Collections.unmodifiableMap(locations);
+		}
+
+		@Override
+		public String getLauncherClassName() {
+			return "org.springframework.boot.loader.launch.WarLauncher";
+		}
+
+		@Override
+		public @Nullable String getLibraryLocation(String libraryName, @Nullable LibraryScope scope) {
+			return SCOPE_LOCATION.get(scope);
+		}
+
+		@Override
+		public String getClassesLocation() {
+			return "WEB-INF/classes/";
+		}
+
+		@Override
+		public String getClasspathIndexFileLocation() {
+			return "WEB-INF/classpath.idx";
+		}
+
+		@Override
+		public String getLayersIndexFileLocation() {
+			return "WEB-INF/layers.idx";
+		}
+
+		@Override
+		public boolean isExecutable() {
+			return true;
+		}
+
+	}
+
+}

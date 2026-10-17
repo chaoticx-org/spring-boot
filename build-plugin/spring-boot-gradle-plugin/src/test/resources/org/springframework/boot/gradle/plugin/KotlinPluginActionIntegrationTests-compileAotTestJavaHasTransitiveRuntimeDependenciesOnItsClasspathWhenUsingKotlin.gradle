@@ -1,0 +1,37 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id 'org.springframework.boot'
+	id 'org.springframework.boot.aot'
+	id 'java'
+	id "org.jetbrains.kotlin.jvm"
+}
+
+repositories {
+	mavenCentral()
+	maven {
+		url = 'repository'
+	}
+}
+
+configurations.all {
+	resolutionStrategy {
+		eachDependency {
+			if (it.requested.group == 'org.springframework.boot') {
+				it.useVersion project.bootVersion
+			}
+		}
+	}
+}
+
+dependencies {
+	implementation "org.hibernate.orm:hibernate-core:6.1.1.Final"
+}
+
+task('compileAotTestJavaClasspath') {
+	doFirst {
+		tasks.findByName('compileAotTestJava').classpath.files.each { println it }
+	}
+}

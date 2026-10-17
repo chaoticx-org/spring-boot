@@ -1,17 +1,5 @@
 /*
- * Copyright 2012-2021 the original author or authors.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      https://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2012-present the original author or authors.
  */
 
 package org.springframework.boot.build.bom.bomr;
@@ -20,7 +8,6 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.Properties;
 
@@ -28,7 +15,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import org.springframework.boot.build.bom.Library;
-import org.springframework.boot.build.bom.Library.LibraryVersion;
 import org.springframework.boot.build.bom.bomr.version.DependencyVersion;
 import org.springframework.util.FileCopyUtils;
 
@@ -49,29 +35,15 @@ class UpgradeApplicatorTests {
 	void whenUpgradeIsAppliedToLibraryWithVersionThenBomIsUpdated() throws IOException {
 		File bom = new File(this.temp, "bom.gradle");
 		FileCopyUtils.copy(new File("src/test/resources/bom.gradle"), bom);
-		String originalContents = new String(Files.readAllBytes(bom.toPath()), StandardCharsets.UTF_8);
+		String originalContents = Files.readString(bom.toPath());
 		File gradleProperties = new File(this.temp, "gradle.properties");
 		FileCopyUtils.copy(new File("src/test/resources/gradle.properties"), gradleProperties);
-		new UpgradeApplicator(bom.toPath(), gradleProperties.toPath()).apply(new Upgrade(
-				new Library("ActiveMQ", new LibraryVersion(DependencyVersion.parse("5.15.11"), null), null, null, null),
-				DependencyVersion.parse("5.16")));
-		String bomContents = new String(Files.readAllBytes(bom.toPath()), StandardCharsets.UTF_8);
-		assertThat(bomContents.length()).isEqualTo(originalContents.length() - 3);
-	}
-
-	@Test
-	void whenUpgradeIsAppliedToLibraryWithAlignedVersionThenBomIsUpdated() throws IOException {
-		File bom = new File(this.temp, "bom.gradle");
-		FileCopyUtils.copy(new File("src/test/resources/bom.gradle"), bom);
-		String originalContents = new String(Files.readAllBytes(bom.toPath()), StandardCharsets.UTF_8);
-		File gradleProperties = new File(this.temp, "gradle.properties");
-		FileCopyUtils.copy(new File("src/test/resources/gradle.properties"), gradleProperties);
-		new UpgradeApplicator(bom.toPath(), gradleProperties.toPath()).apply(
-				new Upgrade(new Library("OAuth2 OIDC SDK", new LibraryVersion(DependencyVersion.parse("8.36.1"), null),
-						null, null, null), DependencyVersion.parse("8.36.2")));
-		String bomContents = new String(Files.readAllBytes(bom.toPath()), StandardCharsets.UTF_8);
-		assertThat(bomContents.length()).isEqualTo(originalContents.length());
-		assertThat(bomContents).contains("version(\"8.36.2\")");
+		Library activeMq = new Library("ActiveMQ", null, DependencyVersion.parse("5.15.11"), null, null, null, null,
+				null, null, null, null, null);
+		new UpgradeApplicator(bom.toPath(), gradleProperties.toPath())
+			.apply(new Upgrade(activeMq, activeMq.withVersion(DependencyVersion.parse("5.16"))));
+		String bomContents = Files.readString(bom.toPath());
+		assertThat(bomContents).hasSize(originalContents.length() - 3);
 	}
 
 	@Test
@@ -80,9 +52,10 @@ class UpgradeApplicatorTests {
 		FileCopyUtils.copy(new File("src/test/resources/bom.gradle"), bom);
 		File gradleProperties = new File(this.temp, "gradle.properties");
 		FileCopyUtils.copy(new File("src/test/resources/gradle.properties"), gradleProperties);
-		new UpgradeApplicator(bom.toPath(), gradleProperties.toPath()).apply(new Upgrade(
-				new Library("Kotlin", new LibraryVersion(DependencyVersion.parse("1.3.70"), null), null, null, null),
-				DependencyVersion.parse("1.4")));
+		Library kotlin = new Library("Kotlin", null, DependencyVersion.parse("1.3.70"), null, null, null, null, null,
+				null, null, null, null);
+		new UpgradeApplicator(bom.toPath(), gradleProperties.toPath())
+			.apply(new Upgrade(kotlin, kotlin.withVersion(DependencyVersion.parse("1.4"))));
 		Properties properties = new Properties();
 		try (InputStream in = new FileInputStream(gradleProperties)) {
 			properties.load(in);

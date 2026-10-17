@@ -1,0 +1,52 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+package org.springframework.boot.data.redis.autoconfigure.health;
+
+import reactor.core.publisher.Flux;
+
+import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
+import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.data.redis.autoconfigure.DataRedisReactiveAutoConfiguration;
+import org.springframework.boot.data.redis.health.DataRedisReactiveHealthIndicator;
+import org.springframework.boot.health.autoconfigure.contributor.CompositeReactiveHealthContributorConfiguration;
+import org.springframework.boot.health.autoconfigure.contributor.ConditionalOnEnabledHealthIndicator;
+import org.springframework.boot.health.contributor.ReactiveHealthContributor;
+import org.springframework.boot.health.contributor.ReactiveHealthIndicator;
+import org.springframework.context.annotation.Bean;
+import org.springframework.data.redis.connection.ReactiveRedisConnectionFactory;
+
+/**
+ * {@link EnableAutoConfiguration Auto-configuration} for
+ * {@link DataRedisReactiveHealthIndicator}.
+ *
+ * @author Christian Dupuis
+ * @author Richard Santana
+ * @author Stephane Nicoll
+ * @author Mark Paluch
+ * @since 4.0.0
+ */
+@AutoConfiguration(after = DataRedisReactiveAutoConfiguration.class)
+@ConditionalOnClass({ ReactiveRedisConnectionFactory.class, Flux.class, ReactiveHealthIndicator.class,
+		ConditionalOnEnabledHealthIndicator.class })
+@ConditionalOnBean(ReactiveRedisConnectionFactory.class)
+@ConditionalOnEnabledHealthIndicator("redis")
+public final class DataRedisReactiveHealthContributorAutoConfiguration extends
+		CompositeReactiveHealthContributorConfiguration<DataRedisReactiveHealthIndicator, ReactiveRedisConnectionFactory> {
+
+	DataRedisReactiveHealthContributorAutoConfiguration() {
+		super(DataRedisReactiveHealthIndicator::new);
+	}
+
+	@Bean
+	@ConditionalOnMissingBean(name = { "redisHealthIndicator", "redisHealthContributor" })
+	ReactiveHealthContributor redisHealthContributor(ConfigurableListableBeanFactory beanFactory) {
+		return createContributor(beanFactory, ReactiveRedisConnectionFactory.class);
+	}
+
+}

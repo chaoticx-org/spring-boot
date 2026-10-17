@@ -1,0 +1,53 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+package org.springframework.boot.health.autoconfigure.actuate.endpoint;
+
+import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
+import org.springframework.boot.autoconfigure.availability.ApplicationAvailabilityAutoConfiguration;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBooleanProperty;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.availability.ApplicationAvailability;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.health.application.LivenessStateHealthIndicator;
+import org.springframework.boot.health.application.ReadinessStateHealthIndicator;
+import org.springframework.boot.health.autoconfigure.application.AvailabilityHealthContributorAutoConfiguration;
+import org.springframework.context.annotation.Bean;
+import org.springframework.core.env.Environment;
+
+/**
+ * {@link EnableAutoConfiguration Auto-configuration} for availability probes.
+ *
+ * @author Brian Clozel
+ * @author Phillip Webb
+ * @since 4.0.0
+ */
+@AutoConfiguration(after = { AvailabilityHealthContributorAutoConfiguration.class,
+		ApplicationAvailabilityAutoConfiguration.class })
+@ConditionalOnClass(name = "org.springframework.boot.actuate.endpoint.annotation.Endpoint")
+@ConditionalOnBooleanProperty(name = "management.endpoint.health.probes.enabled", matchIfMissing = true)
+@EnableConfigurationProperties(HealthEndpointProperties.class)
+public final class AvailabilityProbesAutoConfiguration {
+
+	@Bean
+	@ConditionalOnMissingBean(name = "livenessStateHealthIndicator")
+	LivenessStateHealthIndicator livenessStateHealthIndicator(ApplicationAvailability applicationAvailability) {
+		return new LivenessStateHealthIndicator(applicationAvailability);
+	}
+
+	@Bean
+	@ConditionalOnMissingBean(name = "readinessStateHealthIndicator")
+	ReadinessStateHealthIndicator readinessStateHealthIndicator(ApplicationAvailability applicationAvailability) {
+		return new ReadinessStateHealthIndicator(applicationAvailability);
+	}
+
+	@Bean
+	AvailabilityProbesHealthEndpointGroupsPostProcessor availabilityProbesHealthEndpointGroupsPostProcessor(
+			Environment environment, HealthEndpointProperties properties) {
+		return new AvailabilityProbesHealthEndpointGroupsPostProcessor(environment, properties);
+	}
+
+}

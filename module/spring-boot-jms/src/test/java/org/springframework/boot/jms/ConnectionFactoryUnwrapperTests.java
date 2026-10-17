@@ -1,0 +1,135 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+package org.springframework.boot.jms;
+
+import jakarta.jms.ConnectionFactory;
+import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Test;
+import org.messaginghub.pooled.jms.JmsPoolConnectionFactory;
+
+import org.springframework.boot.testsupport.classpath.ClassPathExclusions;
+import org.springframework.jms.connection.CachingConnectionFactory;
+import org.springframework.jms.connection.SingleConnectionFactory;
+import org.springframework.util.ClassUtils;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+
+/**
+ * Tests for {@link ConnectionFactoryUnwrapper}.
+ *
+ * @author Stephane Nicoll
+ */
+class ConnectionFactoryUnwrapperTests {
+
+	@Nested
+	class UnwrapCaching {
+
+		@Test
+		void unwrapWithSingleConnectionFactory() {
+			ConnectionFactory connectionFactory = new SingleConnectionFactory();
+			assertThat(unwrapCaching(connectionFactory)).isSameAs(connectionFactory);
+		}
+
+		@Test
+		void unwrapWithConnectionFactory() {
+			ConnectionFactory connectionFactory = mock(ConnectionFactory.class);
+			assertThat(unwrapCaching(connectionFactory)).isSameAs(connectionFactory);
+		}
+
+		@Test
+		void unwrapWithCachingConnectionFactory() {
+			ConnectionFactory connectionFactory = mock(ConnectionFactory.class);
+			assertThat(unwrapCaching(new CachingConnectionFactory(connectionFactory))).isSameAs(connectionFactory);
+		}
+
+		@Test
+		void unwrapWithNestedCachingConnectionFactories() {
+			ConnectionFactory connectionFactory = mock(ConnectionFactory.class);
+			CachingConnectionFactory firstCachingConnectionFactory = new CachingConnectionFactory(connectionFactory);
+			CachingConnectionFactory secondCachingConnectionFactory = new CachingConnectionFactory(
+					firstCachingConnectionFactory);
+			assertThat(unwrapCaching(secondCachingConnectionFactory)).isSameAs(connectionFactory);
+		}
+
+		@Test
+		void unwrapWithJmsPoolConnectionFactory() {
+			ConnectionFactory connectionFactory = mock(ConnectionFactory.class);
+			JmsPoolConnectionFactory poolConnectionFactory = new JmsPoolConnectionFactory();
+			poolConnectionFactory.setConnectionFactory(connectionFactory);
+			assertThat(unwrapCaching(poolConnectionFactory)).isSameAs(poolConnectionFactory);
+		}
+
+		private ConnectionFactory unwrapCaching(ConnectionFactory connectionFactory) {
+			return ConnectionFactoryUnwrapper.unwrapCaching(connectionFactory);
+		}
+
+	}
+
+	@Nested
+	class Unwrap {
+
+		@Test
+		void unwrapWithSingleConnectionFactory() {
+			ConnectionFactory connectionFactory = new SingleConnectionFactory();
+			assertThat(unwrap(connectionFactory)).isSameAs(connectionFactory);
+		}
+
+		@Test
+		void unwrapWithConnectionFactory() {
+			ConnectionFactory connectionFactory = mock(ConnectionFactory.class);
+			assertThat(unwrap(connectionFactory)).isSameAs(connectionFactory);
+		}
+
+		@Test
+		void unwrapWithCachingConnectionFactory() {
+			ConnectionFactory connectionFactory = mock(ConnectionFactory.class);
+			assertThat(unwrap(new CachingConnectionFactory(connectionFactory))).isSameAs(connectionFactory);
+		}
+
+		@Test
+		void unwrapWithNestedCachingConnectionFactories() {
+			ConnectionFactory connectionFactory = mock(ConnectionFactory.class);
+			CachingConnectionFactory firstCachingConnectionFactory = new CachingConnectionFactory(connectionFactory);
+			CachingConnectionFactory secondCachingConnectionFactory = new CachingConnectionFactory(
+					firstCachingConnectionFactory);
+			assertThat(unwrap(secondCachingConnectionFactory)).isSameAs(connectionFactory);
+		}
+
+		@Test
+		void unwrapWithJmsPoolConnectionFactory() {
+			ConnectionFactory connectionFactory = mock(ConnectionFactory.class);
+			JmsPoolConnectionFactory poolConnectionFactory = new JmsPoolConnectionFactory();
+			poolConnectionFactory.setConnectionFactory(connectionFactory);
+			assertThat(unwrap(poolConnectionFactory)).isSameAs(connectionFactory);
+		}
+
+		@Test
+		void unwrapWithNestedJmsPoolConnectionFactories() {
+			ConnectionFactory connectionFactory = mock(ConnectionFactory.class);
+			JmsPoolConnectionFactory firstPooledConnectionFactory = new JmsPoolConnectionFactory();
+			firstPooledConnectionFactory.setConnectionFactory(connectionFactory);
+			JmsPoolConnectionFactory secondPooledConnectionFactory = new JmsPoolConnectionFactory();
+			secondPooledConnectionFactory.setConnectionFactory(firstPooledConnectionFactory);
+			assertThat(unwrap(secondPooledConnectionFactory)).isSameAs(connectionFactory);
+		}
+
+		@Test
+		@ClassPathExclusions("pooled-jms-*")
+		void unwrapWithoutJmsPoolOnClasspath() {
+			assertThat(ClassUtils.isPresent("org.messaginghub.pooled.jms.JmsPoolConnectionFactory", null)).isFalse();
+			ConnectionFactory connectionFactory = mock(ConnectionFactory.class);
+			assertThat(unwrap(new CachingConnectionFactory(connectionFactory))).isSameAs(connectionFactory);
+		}
+
+		private ConnectionFactory unwrap(ConnectionFactory connectionFactory) {
+			ConnectionFactory unwrapped = ConnectionFactoryUnwrapper.unwrap(connectionFactory);
+			assertThat(unwrapped).isNotNull();
+			return unwrapped;
+		}
+
+	}
+
+}

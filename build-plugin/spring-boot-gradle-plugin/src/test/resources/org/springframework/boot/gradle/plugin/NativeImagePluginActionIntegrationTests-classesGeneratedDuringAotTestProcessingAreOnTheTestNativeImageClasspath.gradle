@@ -1,0 +1,24 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id 'org.springframework.boot' version '{version}'
+	id 'java'
+}
+
+apply plugin: 'org.graalvm.buildtools.native'
+
+repositories {
+	mavenCentral()
+}
+
+dependencies {
+	testImplementation("org.junit.jupiter:junit-jupiter:{junitVersion}")
+}
+
+task('checkTestNativeImageClasspath') {
+	doFirst {
+		tasks.nativeTestCompile.options.get().classpath.each { println it }
+	}
+}

@@ -1,0 +1,22 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id "java"
+}
+
+description = "Spring Boot reactive OAuth 2 resource server smoke test"
+
+dependencies {
+	implementation(project(":starter:spring-boot-starter-security-oauth2-resource-server"))
+	implementation(project(":starter:spring-boot-starter-webflux"))
+
+	testImplementation(project(":starter:spring-boot-starter-webflux-test"))
+	testImplementation(project(":starter:spring-boot-starter-security-oauth2-resource-server-test"))
+	testImplementation("com.squareup.okhttp3:mockwebserver")
+}
+
+tasks.named("compileTestJava") {
+	options.nullability.checking = "tests"
+}

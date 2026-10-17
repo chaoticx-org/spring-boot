@@ -1,0 +1,34 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id "java-library"
+	id "org.springframework.boot.auto-configuration"
+	id "org.springframework.boot.configuration-properties"
+	id "org.springframework.boot.deployed"
+	id "org.springframework.boot.optional-dependencies"
+	id "org.springframework.boot.test-auto-configuration"
+}
+
+description = "Spring Boot Groovy Templates"
+
+dependencies {
+	api(project(":core:spring-boot"))
+	api("org.apache.groovy:groovy-templates")
+
+	optional(project(":core:spring-boot-autoconfigure"))
+	optional(project(":module:spring-boot-webmvc"))
+	optional(project(":module:spring-boot-webmvc-test"))
+	optional("jakarta.servlet:jakarta.servlet-api")
+
+	testImplementation(project(":core:spring-boot-test-autoconfigure"))
+	testImplementation(project(":test-support:spring-boot-test-support"))
+	testImplementation(testFixtures(project(":core:spring-boot-autoconfigure")))
+
+	testRuntimeOnly("ch.qos.logback:logback-classic")
+}
+
+tasks.named("compileTestJava") {
+	options.nullability.checking = "tests"
+}

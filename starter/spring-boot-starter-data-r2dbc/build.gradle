@@ -1,0 +1,17 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id "org.springframework.boot.starter"
+}
+
+description = "Starter for using Spring Data R2DBC"
+
+dependencies {
+	api(project(":starter:spring-boot-starter"))
+
+	api(project(":module:spring-boot-data-r2dbc"))
+	api(project(":module:spring-boot-r2dbc"))
+	api(project(":module:spring-boot-reactor"))
+}

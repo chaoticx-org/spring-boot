@@ -1,0 +1,63 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+package org.springframework.boot.restclient;
+
+import org.junit.jupiter.api.Test;
+
+import org.springframework.test.web.client.MockRestServiceServer;
+import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClient.Builder;
+import org.springframework.web.client.RestTemplate;
+import org.springframework.web.util.DefaultUriBuilderFactory;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
+
+/**
+ * Tests for building a {@link RestClient} from a {@link RestTemplate}.
+ *
+ * @author Scott Frederick
+ * @deprecated since 4.2.0 for removal in 4.4.0
+ */
+@Deprecated(since = "4.2.0", forRemoval = true)
+@SuppressWarnings("removal")
+class RestClientWithRestTemplateTests {
+
+	@Test
+	void buildUsingRestTemplateUriTemplateHandler() {
+		RestTemplate restTemplate = new RestTemplate();
+		DefaultUriBuilderFactory uriBuilderFactory = new DefaultUriBuilderFactory("https://resttemplate.example.com");
+		restTemplate.setUriTemplateHandler(uriBuilderFactory);
+		Builder builder = RestClient.builder(restTemplate);
+		RestClient client = buildMockedClient(builder, "https://resttemplate.example.com/test");
+		assertThat(client.get().uri("/test").retrieve().toBodilessEntity().getStatusCode().is2xxSuccessful()).isTrue();
+	}
+
+	@Test
+	void buildUsingRestClientBuilderBaseUrl() {
+		RestTemplate restTemplate = new RestTemplate();
+		Builder builder = RestClient.builder(restTemplate).baseUrl("https://restclient.example.com");
+		RestClient client = buildMockedClient(builder, "https://restclient.example.com/test");
+		assertThat(client.get().uri("/test").retrieve().toBodilessEntity().getStatusCode().is2xxSuccessful()).isTrue();
+	}
+
+	@Test
+	void buildUsingRestTemplateUriTemplateHandlerAndRestClientBuilderBaseUrl() {
+		RestTemplate restTemplate = new RestTemplate();
+		DefaultUriBuilderFactory uriBuilderFactory = new DefaultUriBuilderFactory("https://resttemplate.example.com");
+		restTemplate.setUriTemplateHandler(uriBuilderFactory);
+		Builder builder = RestClient.builder(restTemplate).baseUrl("https://restclient.example.com");
+		RestClient client = buildMockedClient(builder, "https://resttemplate.example.com/test");
+		assertThat(client.get().uri("/test").retrieve().toBodilessEntity().getStatusCode().is2xxSuccessful()).isTrue();
+	}
+
+	private RestClient buildMockedClient(Builder builder, String url) {
+		MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+		server.expect(requestTo(url)).andRespond(withSuccess());
+		return builder.build();
+	}
+
+}

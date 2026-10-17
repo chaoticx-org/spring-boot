@@ -1,0 +1,30 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id "org.jetbrains.kotlin.jvm"
+	id "java-library"
+	id "org.springframework.boot.deployed"
+	id "org.springframework.boot.optional-dependencies"
+	id "org.springframework.boot.test-slice"
+}
+
+description = "Spring Boot JPA Test"
+
+dependencies {
+	api(project(":core:spring-boot-test-autoconfigure"))
+	api(project(":module:spring-boot-jdbc-test"))
+	api(project(":module:spring-boot-jpa"))
+
+	optional(project(":core:spring-boot-autoconfigure"))
+	optional("org.jetbrains.kotlin:kotlin-stdlib")
+
+	testImplementation(project(":test-support:spring-boot-test-support"))
+
+	testRuntimeOnly("ch.qos.logback:logback-classic")
+}
+
+tasks.named("compileTestJava") {
+	options.nullability.checking = "tests"
+}

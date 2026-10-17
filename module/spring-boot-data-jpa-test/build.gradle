@@ -1,0 +1,32 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id "java-library"
+	id "org.springframework.boot.deployed"
+	id "org.springframework.boot.optional-dependencies"
+	id "org.springframework.boot.test-slice"
+}
+
+description = "Spring Boot Data JPA Test"
+
+dependencies {
+	api(project(":core:spring-boot-test-autoconfigure"))
+	api(project(":module:spring-boot-data-jpa"))
+	api(project(":module:spring-boot-jpa-test"))
+
+	optional(project(":core:spring-boot-testcontainers"))
+	optional("org.junit.jupiter:junit-jupiter-api")
+
+	testImplementation(project(":test-support:spring-boot-test-support"))
+	testImplementation(testFixtures(project(":core:spring-boot-autoconfigure")))
+
+	testRuntimeOnly("ch.qos.logback:logback-classic")
+	testRuntimeOnly("com.h2database:h2")
+	testRuntimeOnly("org.hsqldb:hsqldb")
+}
+
+tasks.named("compileTestJava") {
+	options.nullability.checking = "tests"
+}

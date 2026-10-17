@@ -1,0 +1,23 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id "java"
+}
+
+description = "Spring Boot Web Services smoke test"
+
+dependencies {
+	implementation(project(":starter:spring-boot-starter-webservices"))
+	implementation("org.jdom:jdom2")
+
+	runtimeOnly("jaxen:jaxen")
+	runtimeOnly("wsdl4j:wsdl4j")
+
+	testImplementation(project(":starter:spring-boot-starter-webservices-test"))
+}
+
+tasks.named("compileTestJava") {
+	options.nullability.checking = "tests"
+}

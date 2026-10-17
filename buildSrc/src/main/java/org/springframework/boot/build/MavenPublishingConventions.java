@@ -1,26 +1,12 @@
 /*
- * Copyright 2012-2021 the original author or authors.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      https://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2012-present the original author or authors.
  */
 
 package org.springframework.boot.build;
 
-import org.apache.maven.artifact.repository.MavenArtifactRepository;
 import org.gradle.api.Project;
+import org.gradle.api.artifacts.repositories.MavenArtifactRepository;
 import org.gradle.api.attributes.Usage;
-import org.gradle.api.component.AdhocComponentWithVariants;
-import org.gradle.api.component.ConfigurationVariantDetails;
 import org.gradle.api.plugins.JavaPlugin;
 import org.gradle.api.plugins.JavaPluginExtension;
 import org.gradle.api.publish.PublishingExtension;
@@ -33,6 +19,11 @@ import org.gradle.api.publish.maven.MavenPomOrganization;
 import org.gradle.api.publish.maven.MavenPomScm;
 import org.gradle.api.publish.maven.MavenPublication;
 import org.gradle.api.publish.maven.plugins.MavenPublishPlugin;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import org.springframework.boot.build.properties.BuildProperties;
+import org.springframework.boot.build.properties.BuildType;
 
 /**
  * Conventions that are applied in the presence of the {@link MavenPublishPlugin}. When
@@ -55,8 +46,11 @@ import org.gradle.api.publish.maven.plugins.MavenPublishPlugin;
  * @author Andy Wilkinson
  * @author Christoph Dreis
  * @author Mike Smithson
+ * @author Stephane Nicoll
  */
 class MavenPublishingConventions {
+
+	private static final Logger logger = LoggerFactory.getLogger(MavenPublishingConventions.class);
 
 	void apply(Project project) {
 		project.getPlugins().withType(MavenPublishPlugin.class).all((mavenPublish) -> {
@@ -67,8 +61,9 @@ class MavenPublishingConventions {
 					mavenRepository.setName("deployment");
 				});
 			}
-			publishing.getPublications().withType(MavenPublication.class)
-					.all((mavenPublication) -> customizeMavenPublication(mavenPublication, project));
+			publishing.getPublications()
+				.withType(MavenPublication.class)
+				.all((mavenPublication) -> customizeMavenPublication(mavenPublication, project));
 			project.getPlugins().withType(JavaPlugin.class).all((javaPlugin) -> {
 				JavaPluginExtension extension = project.getExtensions().getByType(JavaPluginExtension.class);
 				extension.withJavadocJar();
@@ -79,92 +74,85 @@ class MavenPublishingConventions {
 
 	private void customizeMavenPublication(MavenPublication publication, Project project) {
 		customizePom(publication.getPom(), project);
-		project.getPlugins().withType(JavaPlugin.class)
-				.all((javaPlugin) -> customizeJavaMavenPublication(publication, project));
-		suppressMavenOptionalFeatureWarnings(publication);
+		project.getPlugins()
+			.withType(JavaPlugin.class)
+			.all((javaPlugin) -> customizeJavaMavenPublication(publication, project));
 	}
 
 	private void customizePom(MavenPom pom, Project project) {
+		BuildType buildType = BuildProperties.get(project).buildType();
+		String projectName = project.getName();
 		pom.getUrl().set("https://spring.io/projects/spring-boot");
 		pom.getName().set(project.provider(project::getName));
 		pom.getDescription().set(project.provider(project::getDescription));
-		if (!isUserInherited(project)) {
+		if (!isUserInherited(projectName)) {
 			pom.organization(this::customizeOrganization);
 		}
-		pom.licenses(this::customizeLicences);
+		pom.licenses((licenses) -> customizeLicences(licenses, buildType));
 		pom.developers(this::customizeDevelopers);
-		pom.scm((scm) -> customizeScm(scm, project));
-		if (!isUserInherited(project)) {
-			pom.issueManagement(this::customizeIssueManagement);
-		}
+		pom.scm((scm) -> customizeScm(scm, buildType, projectName));
+		pom.issueManagement((issueManagement) -> customizeIssueManagement(issueManagement, buildType, projectName));
 	}
 
 	private void customizeJavaMavenPublication(MavenPublication publication, Project project) {
-		addMavenOptionalFeature(project);
 		publication.versionMapping((strategy) -> strategy.usage(Usage.JAVA_API, (mappingStrategy) -> mappingStrategy
-				.fromResolutionOf(JavaPlugin.RUNTIME_CLASSPATH_CONFIGURATION_NAME)));
+			.fromResolutionOf(JavaPlugin.RUNTIME_CLASSPATH_CONFIGURATION_NAME)));
 		publication.versionMapping(
 				(strategy) -> strategy.usage(Usage.JAVA_RUNTIME, VariantVersionMappingStrategy::fromResolutionResult));
 	}
 
-	/**
-	 * Add a feature that allows maven plugins to declare optional dependencies that
-	 * appear in the POM. This is required to make m2e in Eclipse happy.
-	 * @param project the project to add the feature to
-	 */
-	private void addMavenOptionalFeature(Project project) {
-		JavaPluginExtension extension = project.getExtensions().getByType(JavaPluginExtension.class);
-		extension.registerFeature("mavenOptional",
-				(feature) -> feature.usingSourceSet(extension.getSourceSets().getByName("main")));
-		AdhocComponentWithVariants javaComponent = (AdhocComponentWithVariants) project.getComponents()
-				.findByName("java");
-		javaComponent.addVariantsFromConfiguration(
-				project.getConfigurations().findByName("mavenOptionalRuntimeElements"),
-				ConfigurationVariantDetails::mapToOptional);
-	}
-
-	private void suppressMavenOptionalFeatureWarnings(MavenPublication publication) {
-		publication.suppressPomMetadataWarningsFor("mavenOptionalApiElements");
-		publication.suppressPomMetadataWarningsFor("mavenOptionalRuntimeElements");
-	}
-
 	private void customizeOrganization(MavenPomOrganization organization) {
-		organization.getName().set("Pivotal Software, Inc.");
+		organization.getName().set("VMware, Inc.");
 		organization.getUrl().set("https://spring.io");
 	}
 
-	private void customizeLicences(MavenPomLicenseSpec licences) {
+	private void customizeLicences(MavenPomLicenseSpec licences, BuildType buildType) {
 		licences.license((licence) -> {
-			licence.getName().set("Apache License, Version 2.0");
-			licence.getUrl().set("https://www.apache.org/licenses/LICENSE-2.0");
+			if (buildType == BuildType.OPEN_SOURCE) {
+				licence.getName().set("Apache License, Version 2.0");
+				licence.getUrl().set("https://www.apache.org/licenses/LICENSE-2.0");
+			}
+			else {
+				licence.getName().set("Broadcom Foundation License");
+			}
 		});
 	}
 
 	private void customizeDevelopers(MavenPomDeveloperSpec developers) {
 		developers.developer((developer) -> {
-			developer.getName().set("Pivotal");
-			developer.getEmail().set("info@pivotal.io");
-			developer.getOrganization().set("Pivotal Software, Inc.");
+			developer.getName().set("Spring");
+			developer.getEmail().set("ask@spring.io");
+			developer.getOrganization().set("VMware, Inc.");
 			developer.getOrganizationUrl().set("https://www.spring.io");
 		});
 	}
 
-	private void customizeScm(MavenPomScm scm, Project project) {
-		if (!isUserInherited(project)) {
+	private void customizeScm(MavenPomScm scm, BuildType buildType, String projectName) {
+		if (buildType != BuildType.OPEN_SOURCE) {
+			logger.debug("Skipping Maven POM SCM for non open source build type");
+			return;
+		}
+		scm.getUrl().set("https://github.com/spring-projects/spring-boot");
+		if (!isUserInherited(projectName)) {
 			scm.getConnection().set("scm:git:git://github.com/spring-projects/spring-boot.git");
 			scm.getDeveloperConnection().set("scm:git:ssh://git@github.com/spring-projects/spring-boot.git");
 		}
-		scm.getUrl().set("https://github.com/spring-projects/spring-boot");
 	}
 
-	private void customizeIssueManagement(MavenPomIssueManagement issueManagement) {
-		issueManagement.getSystem().set("GitHub");
-		issueManagement.getUrl().set("https://github.com/spring-projects/spring-boot/issues");
+	private void customizeIssueManagement(MavenPomIssueManagement issueManagement, BuildType buildType,
+			String projectName) {
+		if (buildType != BuildType.OPEN_SOURCE) {
+			logger.debug("Skipping Maven POM SCM for non open source build type");
+			return;
+		}
+		if (!isUserInherited(projectName)) {
+			issueManagement.getSystem().set("GitHub");
+			issueManagement.getUrl().set("https://github.com/spring-projects/spring-boot/issues");
+		}
 	}
 
-	private boolean isUserInherited(Project project) {
-		return "spring-boot-starter-parent".equals(project.getName())
-				|| "spring-boot-dependencies".equals(project.getName());
+	private boolean isUserInherited(String projectName) {
+		return "spring-boot-starter-parent".equals(projectName) || "spring-boot-dependencies".equals(projectName);
 	}
 
 }

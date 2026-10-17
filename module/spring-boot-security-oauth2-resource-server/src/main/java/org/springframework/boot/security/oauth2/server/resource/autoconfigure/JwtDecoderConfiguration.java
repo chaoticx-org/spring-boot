@@ -1,0 +1,167 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+package org.springframework.boot.security.oauth2.server.resource.autoconfigure;
+
+import java.security.KeyFactory;
+import java.security.interfaces.RSAPublicKey;
+import java.security.spec.X509EncodedKeySpec;
+import java.util.ArrayList;
+import java.util.Base64;
+import java.util.Collections;
+import java.util.List;
+import java.util.Set;
+
+import org.jspecify.annotations.Nullable;
+
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.context.properties.source.InvalidConfigurationPropertyValueException;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.oauth2.core.OAuth2TokenValidator;
+import org.springframework.security.oauth2.jose.jws.SignatureAlgorithm;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.jwt.JwtClaimNames;
+import org.springframework.security.oauth2.jwt.JwtClaimValidator;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.jwt.JwtIssuerValidator;
+import org.springframework.security.oauth2.jwt.JwtValidators;
+import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
+import org.springframework.security.oauth2.jwt.NimbusJwtDecoder.JwkSetUriJwtDecoderBuilder;
+import org.springframework.security.oauth2.jwt.NimbusJwtDecoder.PublicKeyJwtDecoderBuilder;
+import org.springframework.security.oauth2.jwt.SupplierJwtDecoder;
+import org.springframework.util.Assert;
+import org.springframework.util.CollectionUtils;
+import org.springframework.util.StringUtils;
+
+/**
+ * {@link Configuration @Configuration} for JWT decoder beans.
+ *
+ * @author Madhura Bhave
+ * @author Artsiom Yudovin
+ * @author HaiTao Zhang
+ * @author Mushtaq Ahmed
+ * @author Roman Golovin
+ * @author Yan Kardziyaka
+ * @author Phillip Webb
+ */
+@Configuration(proxyBeanMethods = false)
+@ConditionalOnClass(JwtDecoder.class)
+@ConditionalOnMissingBean(JwtDecoder.class)
+class JwtDecoderConfiguration {
+
+	private final OAuth2ResourceServerProperties.Jwt properties;
+
+	private final List<OAuth2TokenValidator<Jwt>> additionalValidators;
+
+	private final ObjectProvider<JwkSetUriJwtDecoderBuilderCustomizer> jwkSetUriJwtDecoderBuilderCustomizers;
+
+	JwtDecoderConfiguration(OAuth2ResourceServerProperties properties,
+			ObjectProvider<OAuth2TokenValidator<Jwt>> additionalValidators,
+			ObjectProvider<JwkSetUriJwtDecoderBuilderCustomizer> jwkSetUriJwtDecoderBuilderCustomizers) {
+		this.properties = properties.getJwt();
+		this.additionalValidators = additionalValidators.orderedStream().toList();
+		this.jwkSetUriJwtDecoderBuilderCustomizers = jwkSetUriJwtDecoderBuilderCustomizers;
+	}
+
+	@Bean
+	@ConditionalOnPublicKeyJwtDecoder
+	JwtDecoder jwtDecoderByPublicKeyValue() throws Exception {
+		PublicKeyJwtDecoderBuilder builder = NimbusJwtDecoder.withPublicKey(getReadPublicKey());
+		builder.signatureAlgorithm(exactlyOneAlgorithm());
+		NimbusJwtDecoder decoder = builder.build();
+		decoder.setJwtValidator(getValidator());
+		return decoder;
+	}
+
+	private RSAPublicKey getReadPublicKey() throws Exception {
+		X509EncodedKeySpec spec = new X509EncodedKeySpec(decodeKeyProperty(this.properties.readPublicKey()));
+		return (RSAPublicKey) KeyFactory.getInstance("RSA").generatePublic(spec);
+	}
+
+	private byte[] decodeKeyProperty(String value) {
+		return Base64.getMimeDecoder()
+			.decode(value.replace("-----BEGIN PUBLIC KEY-----", "").replace("-----END PUBLIC KEY-----", ""));
+	}
+
+	private SignatureAlgorithm exactlyOneAlgorithm() {
+		List<String> algorithms = this.properties.getJwsAlgorithms();
+		Assert.state(algorithms != null && algorithms.size() == 1,
+				() -> "Creating a JWT decoder using a public key requires exactly one JWS algorithm but "
+						+ algorithms.size() + " were configured");
+		SignatureAlgorithm algorithm = SignatureAlgorithm.from(algorithms.get(0));
+		if (algorithm == null) {
+			throw new InvalidConfigurationPropertyValueException(
+					"spring.security.oauth2.resourceserver.jwt.jws-algorithms",
+					StringUtils.collectionToCommaDelimitedString(algorithms), "Unknown algorithm");
+		}
+		return algorithm;
+	}
+
+	@Bean
+	@ConditionalOnJwkSetUriJwtDecoder
+	JwtDecoder jwtDecoderByJwkKeySetUri() {
+		String jwkSetUri = this.properties.getJwkSetUri();
+		Assert.state(jwkSetUri != null, "No JWK Set URI property specified");
+		JwkSetUriJwtDecoderBuilder builder = NimbusJwtDecoder.withJwkSetUri(jwkSetUri);
+		builder.jwsAlgorithms(this::jwsAlgorithms);
+		return buildJwkSetUriJwtDecoder(builder);
+	}
+
+	private void jwsAlgorithms(Set<SignatureAlgorithm> signatureAlgorithms) {
+		for (String algorithm : this.properties.getJwsAlgorithms()) {
+			SignatureAlgorithm signatureAlgorithm = SignatureAlgorithm.from(algorithm);
+			if (signatureAlgorithm == null) {
+				throw new InvalidConfigurationPropertyValueException(
+						"spring.security.oauth2.resourceserver.jwt.jws-algorithms", algorithm, "Unknown algorithm");
+			}
+			signatureAlgorithms.add(signatureAlgorithm);
+		}
+	}
+
+	@Bean
+	@ConditionalOnIssuerLocationJwtDecoder
+	SupplierJwtDecoder jwtDecoderByIssuerUri() {
+		return new SupplierJwtDecoder(this::supplyJwtDecoderByIssuerUri);
+	}
+
+	private JwtDecoder supplyJwtDecoderByIssuerUri() {
+		String issuerUri = this.properties.getIssuerUri();
+		Assert.state(issuerUri != null, "No JWT issuer URI property specified");
+		JwkSetUriJwtDecoderBuilder builder = NimbusJwtDecoder.withIssuerLocation(issuerUri);
+		return buildJwkSetUriJwtDecoder(builder);
+	}
+
+	private JwtDecoder buildJwkSetUriJwtDecoder(JwkSetUriJwtDecoderBuilder builder) {
+		this.jwkSetUriJwtDecoderBuilderCustomizers.orderedStream()
+			.forEach((customizer) -> customizer.customize(builder));
+		NimbusJwtDecoder decoder = builder.build();
+		decoder.setJwtValidator(getValidator());
+		return decoder;
+	}
+
+	private OAuth2TokenValidator<Jwt> getValidator() {
+		List<OAuth2TokenValidator<Jwt>> validators = new ArrayList<>();
+		if (StringUtils.hasText(this.properties.getIssuerUri())) {
+			validators.add(new JwtIssuerValidator(this.properties.getIssuerUri()));
+		}
+		if (!CollectionUtils.isEmpty(this.properties.getAudiences())) {
+			validators.add(audienceValidator(this.properties.getAudiences()));
+		}
+		validators.addAll(this.additionalValidators);
+		return validators.isEmpty() ? JwtValidators.createDefault()
+				: JwtValidators.createDefaultWithValidators(validators);
+	}
+
+	private JwtClaimValidator<List<String>> audienceValidator(List<String> audiences) {
+		return new JwtClaimValidator<>(JwtClaimNames.AUD, (claim) -> hasElementsInCommon(claim, audiences));
+	}
+
+	private <E> boolean hasElementsInCommon(@Nullable List<E> c1, List<E> c2) {
+		return c1 != null && !Collections.disjoint(c1, c2);
+	}
+
+}

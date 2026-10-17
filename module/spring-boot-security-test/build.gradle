@@ -1,0 +1,34 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id "java-library"
+	id "org.springframework.boot.deployed"
+	id "org.springframework.boot.optional-dependencies"
+	id "org.springframework.boot.test-auto-configuration"
+}
+
+description = "Spring Boot Security Test"
+
+dependencies {
+	api(project(":core:spring-boot-test-autoconfigure"))
+	api(project(":module:spring-boot-security"))
+	api("org.springframework.security:spring-security-test")
+
+	optional(project(":core:spring-boot-autoconfigure"))
+	optional(project(":module:spring-boot-webflux-test"))
+	optional(project(":module:spring-boot-webmvc-test"))
+	optional("org.seleniumhq.selenium:htmlunit3-driver") {
+		exclude(group: "com.sun.activation", module: "jakarta.activation")
+	}
+
+	testImplementation(project(":test-support:spring-boot-test-support"))
+	testImplementation("jakarta.servlet:jakarta.servlet-api")
+
+	testRuntimeOnly("ch.qos.logback:logback-classic")
+}
+
+tasks.named("compileTestJava") {
+	options.nullability.checking = "tests"
+}

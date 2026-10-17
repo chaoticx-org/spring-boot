@@ -1,0 +1,20 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id "org.springframework.boot.starter"
+}
+
+description = "Starter for testing WebFlux and Reactor Netty"
+
+dependencies {
+	api(project(":starter:spring-boot-starter-jackson-test"))
+	api(project(":starter:spring-boot-starter-test"))
+	api(project(":starter:spring-boot-starter-webflux"))
+
+	api(project(":module:spring-boot-webflux-test"))
+	api(project(":module:spring-boot-webtestclient"))
+
+	api("io.projectreactor:reactor-test")
+}

@@ -1,0 +1,17 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id "org.springframework.boot.starter"
+}
+
+description = "Starter for using Spring Batch with JDBC"
+
+dependencies {
+	api(project(":starter:spring-boot-starter"))
+	api(project(":starter:spring-boot-starter-batch"))
+	api(project(":starter:spring-boot-starter-jdbc"))
+
+	api(project(":module:spring-boot-batch-jdbc"))
+}

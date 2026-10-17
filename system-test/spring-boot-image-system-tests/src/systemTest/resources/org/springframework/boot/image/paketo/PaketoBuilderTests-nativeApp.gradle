@@ -1,0 +1,43 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id 'org.springframework.boot' version '{bootVersion}'
+	id 'org.springframework.boot.aot' version '{bootVersion}'
+	id 'io.spring.dependency-management' version '{dependencyManagementPluginVersion}'
+	id 'org.graalvm.buildtools.native' version '{nativeBuildToolsVersion}'
+	id 'java'
+}
+
+repositories {
+	exclusiveContent {
+		forRepository {
+			maven {
+				url = '{systemTestMavenRepository}'
+			}
+		}
+		filter {
+			includeGroup "org.springframework.boot"
+		}
+	}
+	mavenCentral()
+	spring.mavenRepositories()
+}
+
+tasks.named("bootBuildImage") {
+	environment["BP_JVM_VERSION"] = "25"
+}
+
+dependencies {
+	implementation("org.springframework.boot:spring-boot-starter-webmvc:{bootVersion}")
+}
+
+bootJar {
+	manifest {
+		attributes(
+				'Implementation-Version': '1.0.0',
+				'Implementation-Title': 'Paketo Test'
+		)
+	}
+}

@@ -1,0 +1,29 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id "war"
+}
+
+description = "Spring Boot war smoke test"
+
+configurations {
+	providedCompile {
+		extendsFrom dependencyManagement
+	}
+}
+
+dependencies {
+	implementation(project(":starter:spring-boot-starter-webmvc")) {
+		exclude module: "spring-boot-starter-tomcat"
+	}
+
+	providedCompile("jakarta.servlet:jakarta.servlet-api")
+
+	testImplementation(project(":starter:spring-boot-starter-test"))
+}
+
+tasks.named("compileTestJava") {
+	options.nullability.checking = "tests"
+}

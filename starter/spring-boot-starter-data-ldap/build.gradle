@@ -1,0 +1,16 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id "org.springframework.boot.starter"
+}
+
+description = "Starter for using Spring Data LDAP"
+
+dependencies {
+	api(project(":starter:spring-boot-starter"))
+
+	api(project(":module:spring-boot-data-ldap"))
+	api(project(":module:spring-boot-ldap"))
+}

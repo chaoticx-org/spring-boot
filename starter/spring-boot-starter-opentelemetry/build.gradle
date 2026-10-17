@@ -1,0 +1,20 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id "org.springframework.boot.starter"
+}
+
+description = "Starter for using OpenTelemetry"
+
+dependencies {
+	api(project(":starter:spring-boot-starter"))
+	api(project(":starter:spring-boot-starter-micrometer-metrics"))
+	api(project(":module:spring-boot-micrometer-tracing-opentelemetry"))
+	api(project(":module:spring-boot-opentelemetry"))
+
+	runtimeOnly 'io.micrometer:micrometer-registry-otlp'
+	runtimeOnly('io.micrometer:micrometer-tracing-bridge-otel')
+	runtimeOnly 'io.opentelemetry:opentelemetry-exporter-otlp'
+}

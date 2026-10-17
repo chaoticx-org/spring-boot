@@ -1,0 +1,21 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id "org.springframework.boot.starter"
+}
+
+description = "Starter for using Spring for Apache Pulsar"
+
+dependencies {
+	api(project(":starter:spring-boot-starter"))
+
+	api(project(":module:spring-boot-pulsar"))
+}
+
+checkRuntimeClasspathForConflicts {
+	ignore { name -> name.startsWith("org/bouncycastle/") ||
+				name.matches("^org/apache/pulsar/.*/package-info.class\$") ||
+				name.equals("findbugsExclude.xml") }
+}

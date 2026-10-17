@@ -1,0 +1,59 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+package org.springframework.boot.data.elasticsearch.autoconfigure;
+
+import java.util.Map;
+
+import co.elastic.clients.elasticsearch.core.GetResponse;
+import co.elastic.clients.elasticsearch.core.IndexResponse;
+import org.junit.jupiter.api.Test;
+import org.testcontainers.elasticsearch.ElasticsearchContainer;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
+import reactor.core.publisher.Mono;
+
+import org.springframework.boot.autoconfigure.AutoConfigurations;
+import org.springframework.boot.elasticsearch.autoconfigure.ElasticsearchClientAutoConfiguration;
+import org.springframework.boot.elasticsearch.autoconfigure.ElasticsearchRestClientAutoConfiguration;
+import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.boot.testsupport.container.TestImage;
+import org.springframework.data.elasticsearch.client.elc.ReactiveElasticsearchClient;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/**
+ * Integration tests for {@link DataElasticsearchAutoConfiguration}.
+ *
+ * @author Brian Clozel
+ * @author Andy Wilkinson
+ */
+@Testcontainers(disabledWithoutDocker = true)
+class DataElasticsearchAutoConfigurationIntegrationTests {
+
+	@Container
+	static final ElasticsearchContainer elasticsearch = TestImage.ELASTICSEARCH.container();
+
+	private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
+		.withConfiguration(AutoConfigurations.of(ElasticsearchRestClientAutoConfiguration.class,
+				ElasticsearchClientAutoConfiguration.class, DataElasticsearchAutoConfiguration.class));
+
+	@Test
+	void reactiveClientCanQueryElasticsearchNode() {
+		this.contextRunner
+			.withPropertyValues("spring.elasticsearch.uris=" + elasticsearch.getHttpHostAddress(),
+					"spring.elasticsearch.connection-timeout=120s", "spring.elasticsearch.socket-timeout=120s")
+			.run((context) -> {
+				ReactiveElasticsearchClient client = context.getBean(ReactiveElasticsearchClient.class);
+				Mono<IndexResponse> index = client
+					.index((b) -> b.index("foo").id("1").document(Map.of("a", "alpha", "b", "bravo")));
+				index.block();
+				Mono<GetResponse<Object>> get = client.get((b) -> b.index("foo").id("1"), Object.class);
+				GetResponse<Object> response = get.block();
+				assertThat(response).isNotNull();
+				assertThat(response.found()).isTrue();
+			});
+	}
+
+}

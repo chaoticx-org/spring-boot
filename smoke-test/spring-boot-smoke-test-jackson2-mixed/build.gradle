@@ -1,0 +1,17 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id "java"
+}
+
+description = "Spring Boot Jackson 2 mixed with Jackson 3 smoke test"
+
+dependencies {
+	implementation(project(":module:spring-boot-jackson2"))
+	implementation(project(":starter:spring-boot-starter-actuator"))
+	implementation(project(":starter:spring-boot-starter-webmvc"))
+
+	testImplementation(project(":starter:spring-boot-starter-webmvc-test"))
+}

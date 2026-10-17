@@ -1,0 +1,109 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+package org.springframework.boot.build.bom;
+
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
+
+import javax.inject.Inject;
+
+import org.apache.hc.client5.http.config.RequestConfig;
+import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
+import org.apache.hc.client5.http.impl.classic.HttpClients;
+import org.gradle.api.DefaultTask;
+import org.gradle.api.file.RegularFileProperty;
+import org.gradle.api.tasks.InputFile;
+import org.gradle.api.tasks.PathSensitive;
+import org.gradle.api.tasks.PathSensitivity;
+import org.gradle.api.tasks.TaskAction;
+import org.gradle.internal.impldep.org.apache.http.client.config.CookieSpecs;
+
+import org.springframework.boot.build.bom.Library.Link;
+import org.springframework.boot.build.bom.Library.LinkType;
+import org.springframework.boot.build.bom.Library.LinkedVersion;
+import org.springframework.boot.build.bom.ResolvedBom.ResolvedLibrary;
+import org.springframework.boot.build.bom.bomr.version.DependencyVersion;
+import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
+import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClient.ResponseSpec.ErrorHandler;
+
+/**
+ * Task to check that links are working.
+ *
+ * @author Andy Wilkinson
+ * @author Phillip Webb
+ */
+public abstract class CheckLinks extends DefaultTask {
+
+	private static final ErrorHandler NOOP_ERROR_HANDLER = (request, response) -> {
+	};
+
+	private static final List<String> URL_ALTERNATIVES = List.of("index.html", "module-summary.html");
+
+	private final BomExtension bom;
+
+	@Inject
+	public CheckLinks(BomExtension bom) {
+		this.bom = bom;
+	}
+
+	@InputFile
+	@PathSensitive(PathSensitivity.RELATIVE)
+	public abstract RegularFileProperty getResolvedBomFile();
+
+	@TaskAction
+	void check() {
+		RequestConfig config = RequestConfig.custom().setCookieSpec(CookieSpecs.IGNORE_COOKIES).build();
+		CloseableHttpClient httpClient = HttpClients.custom().setDefaultRequestConfig(config).build();
+		HttpComponentsClientHttpRequestFactory requestFactory = new HttpComponentsClientHttpRequestFactory(httpClient);
+		RestClient restClient = RestClient.builder()
+			.requestFactory(requestFactory)
+			.defaultStatusHandler((status) -> true, NOOP_ERROR_HANDLER)
+			.build();
+		this.bom.getLibraries().forEach((library) -> check(restClient, library));
+	}
+
+	private void check(RestClient restClient, Library library) {
+		ResolvedBom resolvedBom = ResolvedBom.readFrom(getResolvedBomFile().get().getAsFile());
+		ResolvedLibrary resolvedLibrary = resolvedBom.library(library);
+		DependencyVersion libraryVersion = library.getVersion();
+		String libraryName = library.getName();
+		library.getLinks().forEachLink((type, link) -> check(restClient, type, link, libraryName, libraryVersion));
+		library.getModuleLinks().forEach((module, links) -> {
+			String moduleName = "%s (%s)".formatted(library.getName(), module);
+			String moduleVersion = resolvedLibrary.moduleVersion(module);
+			links.forEachLink((type, link) -> check(restClient, type, link, moduleName, moduleVersion));
+		});
+	}
+
+	private void check(RestClient restClient, LinkType type, Link link, String name, Object version) {
+		String url = link.url(new LinkedVersion(version));
+		int statusCode = getStatusCode(restClient, url);
+		System.out.printf("[%3d] %s - %s (%s)%n", statusCode, name, type, url);
+	}
+
+	private int getStatusCode(RestClient restClient, String url) {
+		Set<String> urls = new LinkedHashSet<>();
+		urls.add(url);
+		if (!url.endsWith("/")) {
+			url = url + "/";
+			urls.add(url);
+		}
+		for (String alternative : URL_ALTERNATIVES) {
+			urls.add(url + alternative);
+		}
+		Integer firstStatusCode = null;
+		for (String candidate : urls) {
+			int statusCode = restClient.head().uri(candidate).retrieve().toEntity(String.class).getStatusCode().value();
+			if (statusCode == 200) {
+				return statusCode;
+			}
+			firstStatusCode = (firstStatusCode != null) ? firstStatusCode : statusCode;
+		}
+		return firstStatusCode;
+	}
+
+}

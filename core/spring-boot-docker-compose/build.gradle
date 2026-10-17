@@ -1,0 +1,38 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id "java-library"
+	id "java-test-fixtures"
+	id "org.springframework.boot.configuration-properties"
+	id "org.springframework.boot.deployed"
+	id "org.springframework.boot.docker-test"
+	id "org.springframework.boot.optional-dependencies"
+}
+
+description = "Spring Boot Docker Compose"
+
+dependencies {
+	api(project(":core:spring-boot-autoconfigure"))
+
+	implementation("tools.jackson.core:jackson-databind")
+
+	dockerTestImplementation(project(":test-support:spring-boot-docker-test-support"))
+
+	dockerTestRuntimeOnly("org.testcontainers:testcontainers")
+
+	testImplementation(project(":core:spring-boot-test"))
+	testImplementation(project(":test-support:spring-boot-test-support"))
+	testImplementation("ch.qos.logback:logback-classic")
+
+	testFixturesImplementation(project(":test-support:spring-boot-docker-test-support"))
+}
+
+tasks.named("compileTestJava") {
+	options.nullability.checking = "tests"
+}
+
+tasks.named("compileDockerTestJava") {
+	options.nullability.checking = "tests"
+}

@@ -1,0 +1,14 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id 'org.springframework.boot' version '{version}' apply false
+}
+
+group = 'foo'
+version = '0.1.0'
+
+tasks.register("buildInfo", org.springframework.boot.gradle.tasks.buildinfo.BuildInfo) {
+	excludes = ['group', 'artifact', 'version', 'name']
+}

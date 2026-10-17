@@ -1,0 +1,15 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id "org.springframework.boot.starter"
+}
+
+description = "Starter for testing Spring Integration"
+
+dependencies {
+	api(project(":starter:spring-boot-starter-integration"))
+	api(project(":starter:spring-boot-starter-test"))
+	api("org.springframework.integration:spring-integration-test")
+}

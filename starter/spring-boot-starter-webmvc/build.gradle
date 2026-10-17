@@ -1,0 +1,18 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id "org.springframework.boot.starter"
+}
+
+description = "Starter for using Spring MVC and Tomcat"
+
+dependencies {
+	api(project(":starter:spring-boot-starter"))
+	api(project(":starter:spring-boot-starter-jackson"))
+	api(project(":starter:spring-boot-starter-tomcat"))
+
+	api(project(":module:spring-boot-http-converter"))
+	api(project(":module:spring-boot-webmvc"))
+}

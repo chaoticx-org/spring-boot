@@ -1,0 +1,111 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+package org.springframework.boot.micrometer.metrics.autoconfigure.system;
+
+import java.io.File;
+import java.util.Collections;
+import java.util.List;
+
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Tags;
+import io.micrometer.core.instrument.binder.jvm.convention.JvmCpuCountMeterConvention;
+import io.micrometer.core.instrument.binder.jvm.convention.JvmCpuLoadMeterConvention;
+import io.micrometer.core.instrument.binder.jvm.convention.JvmCpuMeterConventions;
+import io.micrometer.core.instrument.binder.jvm.convention.JvmCpuTimeMeterConvention;
+import io.micrometer.core.instrument.binder.system.FileDescriptorMetrics;
+import io.micrometer.core.instrument.binder.system.ProcessorMetrics;
+import io.micrometer.core.instrument.binder.system.UptimeMetrics;
+import org.jspecify.annotations.Nullable;
+
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.context.properties.PropertyMapper;
+import org.springframework.boot.micrometer.metrics.autoconfigure.CompositeMeterRegistryAutoConfiguration;
+import org.springframework.boot.micrometer.metrics.autoconfigure.MetricsAutoConfiguration;
+import org.springframework.boot.micrometer.metrics.autoconfigure.MetricsProperties;
+import org.springframework.boot.micrometer.metrics.system.DiskSpaceMetricsBinder;
+import org.springframework.boot.micrometer.observation.autoconfigure.ObservationProperties;
+import org.springframework.boot.micrometer.observation.autoconfigure.condition.SemanticConventions;
+import org.springframework.context.annotation.Bean;
+
+/**
+ * {@link EnableAutoConfiguration Auto-configuration} for system metrics.
+ *
+ * @author Stephane Nicoll
+ * @author Chris Bono
+ * @since 4.0.0
+ */
+@AutoConfiguration(after = { MetricsAutoConfiguration.class, CompositeMeterRegistryAutoConfiguration.class })
+@ConditionalOnClass(MeterRegistry.class)
+@ConditionalOnBean(MeterRegistry.class)
+@EnableConfigurationProperties({ MetricsProperties.class, ObservationProperties.class })
+public final class SystemMetricsAutoConfiguration {
+
+	@Bean
+	@ConditionalOnMissingBean
+	UptimeMetrics uptimeMetrics() {
+		return new UptimeMetrics();
+	}
+
+	@Bean
+	@ConditionalOnMissingBean
+	@SuppressWarnings("deprecation")
+	ProcessorMetrics processorMetrics(ObservationProperties observationProperties,
+			ObjectProvider<JvmCpuMeterConventions> jvmCpuMeterConventions,
+			ObjectProvider<JvmCpuTimeMeterConvention> jvmCpuTimeMeterConvention,
+			ObjectProvider<JvmCpuCountMeterConvention> jvmCpuCountMeterConvention,
+			ObjectProvider<JvmCpuLoadMeterConvention> jvmCpuLoadMeterConvention) {
+		JvmCpuMeterConventions deprecatedConventions = jvmCpuMeterConventions.getIfAvailable();
+		ProcessorMetricsFactory factory = new ProcessorMetricsFactory(jvmCpuTimeMeterConvention.getIfAvailable(),
+				jvmCpuCountMeterConvention.getIfAvailable(), jvmCpuLoadMeterConvention.getIfAvailable());
+		if (deprecatedConventions != null && factory.hasConvention()) {
+			throw new IllegalStateException("Either %s or the interfaces that supersede it should be set"
+				.formatted(JvmCpuMeterConventions.class.getSimpleName()));
+		}
+		return (deprecatedConventions != null) ? new ProcessorMetrics(Collections.emptyList(), deprecatedConventions)
+				: factory.create(observationProperties);
+	}
+
+	@Bean
+	@ConditionalOnMissingBean
+	FileDescriptorMetrics fileDescriptorMetrics() {
+		return new FileDescriptorMetrics();
+	}
+
+	@Bean
+	@ConditionalOnMissingBean
+	DiskSpaceMetricsBinder diskSpaceMetrics(MetricsProperties properties) {
+		List<File> paths = properties.getSystem().getDiskspace().getPaths();
+		return new DiskSpaceMetricsBinder(paths, Tags.empty());
+	}
+
+	private record ProcessorMetricsFactory(@Nullable JvmCpuTimeMeterConvention cpuTimeConvention,
+			@Nullable JvmCpuCountMeterConvention cpuCountConvention,
+			@Nullable JvmCpuLoadMeterConvention cpuLoadConvention) {
+
+		boolean hasConvention() {
+			return this.cpuTimeConvention != null || this.cpuCountConvention != null || this.cpuLoadConvention != null;
+		}
+
+		ProcessorMetrics create(ObservationProperties observationProperties) {
+			ProcessorMetrics.Builder builder = ProcessorMetrics.builder();
+			if (observationProperties.getConventions() == SemanticConventions.OPEN_TELEMETRY) {
+				builder.openTelemetryConventions();
+			}
+			PropertyMapper map = PropertyMapper.get();
+			map.from(this.cpuTimeConvention).to(builder::cpuTimeConvention);
+			map.from(this.cpuCountConvention).to(builder::cpuCountConvention);
+			map.from(this.cpuLoadConvention).to(builder::cpuLoadConvention);
+			return builder.build();
+		}
+
+	}
+
+}

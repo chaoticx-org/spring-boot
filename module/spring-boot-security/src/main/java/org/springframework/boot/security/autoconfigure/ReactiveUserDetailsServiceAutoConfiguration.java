@@ -1,0 +1,111 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+package org.springframework.boot.security.autoconfigure;
+
+import java.util.List;
+import java.util.regex.Pattern;
+
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+import org.jspecify.annotations.Nullable;
+
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
+import org.springframework.boot.autoconfigure.condition.AnyNestedCondition;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication.Type;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Conditional;
+import org.springframework.messaging.rsocket.annotation.support.RSocketMessageHandler;
+import org.springframework.security.authentication.ReactiveAuthenticationManager;
+import org.springframework.security.authentication.ReactiveAuthenticationManagerResolver;
+import org.springframework.security.core.userdetails.MapReactiveUserDetailsService;
+import org.springframework.security.core.userdetails.ReactiveUserDetailsService;
+import org.springframework.security.core.userdetails.User;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.util.StringUtils;
+
+/**
+ * {@link EnableAutoConfiguration Auto-configuration} for a Spring Security in-memory
+ * {@link ReactiveUserDetailsService}. Adds a {@link MapReactiveUserDetailsService} with a
+ * default user and generated password.
+ * <p>
+ * This configuration backs-off completely if there is a bean of type
+ * {@link ReactiveUserDetailsService}, {@link ReactiveAuthenticationManager}, or
+ * {@link ReactiveAuthenticationManagerResolver}.
+ * <p>
+ * Note that the reactive application detection mechanism is limited to web applications
+ * only. If you're writing a non-web application you will need to configure reactive
+ * security yourself.
+ *
+ * @author Madhura Bhave
+ * @since 4.0.0
+ */
+@AutoConfiguration(afterName = "org.springframework.boot.rsocket.autoconfigure.RSocketMessagingAutoConfiguration")
+@ConditionalOnClass({ ReactiveAuthenticationManager.class })
+@ConditionalOnMissingBean(
+		value = { ReactiveAuthenticationManager.class, ReactiveUserDetailsService.class,
+				ReactiveAuthenticationManagerResolver.class },
+		type = { "org.springframework.security.oauth2.jwt.ReactiveJwtDecoder" })
+@Conditional({ ReactiveUserDetailsServiceAutoConfiguration.RSocketEnabledOrReactiveWebApplication.class,
+		MissingAlternativeUserDetailsManagerOrUserPropertiesConfigured.class })
+@EnableConfigurationProperties(SecurityProperties.class)
+public final class ReactiveUserDetailsServiceAutoConfiguration {
+
+	private static final String NOOP_PASSWORD_PREFIX = "{noop}";
+
+	private static final Pattern PASSWORD_ALGORITHM_PATTERN = Pattern.compile("^\\{.+}.*$");
+
+	private static final Log logger = LogFactory.getLog(ReactiveUserDetailsServiceAutoConfiguration.class);
+
+	@Bean
+	MapReactiveUserDetailsService reactiveUserDetailsService(SecurityProperties properties,
+			ObjectProvider<PasswordEncoder> passwordEncoder) {
+		SecurityProperties.User user = properties.getUser();
+		UserDetails userDetails = getUserDetails(user, getOrDeducePassword(user, passwordEncoder.getIfAvailable()));
+		return new MapReactiveUserDetailsService(userDetails);
+	}
+
+	private UserDetails getUserDetails(SecurityProperties.User user, String password) {
+		List<String> roles = user.getRoles();
+		return User.withUsername(user.getName()).password(password).roles(StringUtils.toStringArray(roles)).build();
+	}
+
+	private String getOrDeducePassword(SecurityProperties.User user, @Nullable PasswordEncoder encoder) {
+		String password = user.getPassword();
+		if (user.isPasswordGenerated()) {
+			logger.info(String.format("%n%nUsing generated security password: %s%n", user.getPassword()));
+		}
+		if (encoder != null || PASSWORD_ALGORITHM_PATTERN.matcher(password).matches()) {
+			return password;
+		}
+		return NOOP_PASSWORD_PREFIX + password;
+	}
+
+	static class RSocketEnabledOrReactiveWebApplication extends AnyNestedCondition {
+
+		RSocketEnabledOrReactiveWebApplication() {
+			super(ConfigurationPhase.REGISTER_BEAN);
+		}
+
+		@ConditionalOnBean(RSocketMessageHandler.class)
+		static class RSocketSecurityEnabledCondition {
+
+		}
+
+		@ConditionalOnWebApplication(type = Type.REACTIVE)
+		static class ReactiveWebApplicationCondition {
+
+		}
+
+	}
+
+}

@@ -1,0 +1,56 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+package org.springframework.boot.webflux;
+
+import org.jspecify.annotations.Nullable;
+
+import org.springframework.aot.hint.RuntimeHints;
+import org.springframework.aot.hint.RuntimeHintsRegistrar;
+import org.springframework.aot.hint.TypeReference;
+import org.springframework.boot.WebApplicationType;
+import org.springframework.core.annotation.Order;
+import org.springframework.util.ClassUtils;
+
+/**
+ * {@link WebApplicationType} deducer to ensure Spring WebFlux applications use
+ * {@link WebApplicationType#REACTIVE}.
+ *
+ * @author Phillip Webb
+ */
+@Order(20) // Ordered after MVC
+class WebFluxWebApplicationTypeDeducer implements WebApplicationType.Deducer {
+
+	private static final String[] INDICATOR_CLASSES = { "reactor.core.publisher.Mono",
+			"org.springframework.web.reactive.DispatcherHandler" };
+
+	@Override
+	public @Nullable WebApplicationType deduceWebApplicationType() {
+		// Guard in case the classic module is being used and dependencies are excluded
+		for (String indicatorClass : INDICATOR_CLASSES) {
+			if (!ClassUtils.isPresent(indicatorClass, null)) {
+				return null;
+			}
+		}
+		return WebApplicationType.REACTIVE;
+	}
+
+	static class WebFluxWebApplicationTypeDeducerRuntimeHints implements RuntimeHintsRegistrar {
+
+		@Override
+		public void registerHints(RuntimeHints hints, @Nullable ClassLoader classLoader) {
+			for (String servletIndicatorClass : INDICATOR_CLASSES) {
+				registerTypeIfPresent(servletIndicatorClass, classLoader, hints);
+			}
+		}
+
+		private void registerTypeIfPresent(String typeName, @Nullable ClassLoader classLoader, RuntimeHints hints) {
+			if (ClassUtils.isPresent(typeName, classLoader)) {
+				hints.reflection().registerType(TypeReference.of(typeName));
+			}
+		}
+
+	}
+
+}

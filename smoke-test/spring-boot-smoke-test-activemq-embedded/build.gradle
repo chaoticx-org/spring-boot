@@ -1,0 +1,21 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id "java"
+}
+
+description = "Spring Boot Actuator ActiveMQ Embedded smoke test"
+
+dependencies {
+	implementation(project(":starter:spring-boot-starter-activemq"))
+
+	runtimeOnly("org.apache.activemq:activemq-broker")
+
+	testImplementation(project(":starter:spring-boot-starter-activemq-test"))
+}
+
+tasks.named("compileTestJava") {
+	options.nullability.checking = "tests"
+}

@@ -1,0 +1,140 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+package org.springframework.boot.tomcat.autoconfigure.servlet;
+
+import org.apache.catalina.Context;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
+import org.springframework.boot.context.properties.bind.Bindable;
+import org.springframework.boot.context.properties.bind.Binder;
+import org.springframework.boot.context.properties.source.ConfigurationPropertySources;
+import org.springframework.boot.tomcat.TomcatWebServer;
+import org.springframework.boot.tomcat.autoconfigure.TomcatServerProperties;
+import org.springframework.boot.tomcat.servlet.TomcatServletWebServerFactory;
+import org.springframework.mock.env.MockEnvironment;
+import org.springframework.test.context.support.TestPropertySourceUtils;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/**
+ * Tests for {@link TomcatServletWebServerFactoryCustomizer}.
+ *
+ * @author Phillip Webb
+ * @author Tiziano Basile
+ */
+class TomcatServletWebServerFactoryCustomizerTests {
+
+	private final TomcatServerProperties tomcatProperties = new TomcatServerProperties();
+
+	private TomcatServletWebServerFactoryCustomizer customizer;
+
+	private MockEnvironment environment;
+
+	@BeforeEach
+	void setup() {
+		this.environment = new MockEnvironment();
+		ConfigurationPropertySources.attach(this.environment);
+		this.customizer = new TomcatServletWebServerFactoryCustomizer(this.tomcatProperties);
+	}
+
+	@Test
+	void customTldSkip() {
+		bind("server.tomcat.servlet.additional-tld-skip-patterns=foo.jar,bar.jar");
+		testCustomTldSkip("foo.jar", "bar.jar");
+	}
+
+	@Test
+	@Deprecated(since = "4.2.0", forRemoval = true)
+	void customTldSkipUsingDeprecatedProperty() {
+		bind("server.tomcat.additional-tld-skip-patterns=foo.jar,bar.jar");
+		testCustomTldSkip("foo.jar", "bar.jar");
+	}
+
+	@Test
+	void customTldSkipAsList() {
+		bind("server.tomcat.servlet.additional-tld-skip-patterns[0]=biz.jar",
+				"server.tomcat.servlet.additional-tld-skip-patterns[1]=bah.jar");
+		testCustomTldSkip("biz.jar", "bah.jar");
+	}
+
+	@Test
+	@Deprecated(since = "4.2.0", forRemoval = true)
+	void customTldSkipAsListUsingDeprecatedProperty() {
+		bind("server.tomcat.additional-tld-skip-patterns[0]=biz.jar",
+				"server.tomcat.additional-tld-skip-patterns[1]=bah.jar");
+		testCustomTldSkip("biz.jar", "bah.jar");
+	}
+
+	private void testCustomTldSkip(String... expectedJars) {
+		TomcatServletWebServerFactory factory = customizeAndGetFactory();
+		assertThat(factory.getTldSkipPatterns()).contains(expectedJars);
+		assertThat(factory.getTldSkipPatterns()).contains("junit-*.jar", "spring-boot-*.jar");
+	}
+
+	@Test
+	void redirectContextRootCanBeConfigured() {
+		bind("server.tomcat.servlet.redirect-context-root=false");
+		assertThat(this.tomcatProperties.getServlet().isRedirectContextRoot()).isFalse();
+		TomcatWebServer server = customizeAndGetServer();
+		Context context = (Context) server.getTomcat().getHost().findChildren()[0];
+		assertThat(context.getMapperContextRootRedirectEnabled()).isFalse();
+	}
+
+	@Test
+	@Deprecated(since = "4.2.0", forRemoval = true)
+	void redirectContextRootCanBeConfiguredUsingDeprecatedProperty() {
+		bind("server.tomcat.redirect-context-root=false");
+		assertThat(this.tomcatProperties.getServlet().isRedirectContextRoot()).isFalse();
+		TomcatWebServer server = customizeAndGetServer();
+		Context context = (Context) server.getTomcat().getHost().findChildren()[0];
+		assertThat(context.getMapperContextRootRedirectEnabled()).isFalse();
+	}
+
+	@Test
+	void useRelativeRedirectsDefaultsToTrue() {
+		assertThat(this.tomcatProperties.getServlet().isUseRelativeRedirects()).isTrue();
+		TomcatWebServer server = customizeAndGetServer();
+		Context context = (Context) server.getTomcat().getHost().findChildren()[0];
+		assertThat(context.getUseRelativeRedirects()).isTrue();
+	}
+
+	@Test
+	void useRelativeRedirectsCanBeDisabled() {
+		bind("server.tomcat.servlet.use-relative-redirects=false");
+		assertThat(this.tomcatProperties.getServlet().isUseRelativeRedirects()).isFalse();
+		TomcatWebServer server = customizeAndGetServer();
+		Context context = (Context) server.getTomcat().getHost().findChildren()[0];
+		assertThat(context.getUseRelativeRedirects()).isFalse();
+	}
+
+	@Test
+	@Deprecated(since = "4.2.0", forRemoval = true)
+	void useRelativeRedirectsCanBeDisabledUsingDeprecatedProperty() {
+		bind("server.tomcat.use-relative-redirects=false");
+		assertThat(this.tomcatProperties.getServlet().isUseRelativeRedirects()).isFalse();
+		TomcatWebServer server = customizeAndGetServer();
+		Context context = (Context) server.getTomcat().getHost().findChildren()[0];
+		assertThat(context.getUseRelativeRedirects()).isFalse();
+	}
+
+	private void bind(String... inlinedProperties) {
+		TestPropertySourceUtils.addInlinedPropertiesToEnvironment(this.environment, inlinedProperties);
+		new Binder(ConfigurationPropertySources.get(this.environment)).bind("server.tomcat",
+				Bindable.ofInstance(this.tomcatProperties));
+	}
+
+	private TomcatWebServer customizeAndGetServer() {
+		TomcatServletWebServerFactory factory = customizeAndGetFactory();
+		return (TomcatWebServer) factory.getWebServer();
+	}
+
+	private TomcatServletWebServerFactory customizeAndGetFactory() {
+		TomcatServletWebServerFactory factory = new TomcatServletWebServerFactory(0);
+		this.customizer.customize(factory);
+		return factory;
+	}
+
+}

@@ -1,17 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      https://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2012-present the original author or authors.
  */
 
 package org.springframework.boot.build.context.properties;
@@ -30,6 +18,8 @@ import java.util.stream.Collectors;
 
 import org.gradle.api.file.FileCollection;
 
+import org.springframework.boot.build.context.properties.ConfigurationProperty.Deprecation;
+
 /**
  * Configuration properties snippets.
  *
@@ -42,8 +32,11 @@ class Snippets {
 
 	private final List<Snippet> snippets = new ArrayList<>();
 
-	Snippets(FileCollection configurationPropertyMetadata) {
+	private final boolean deprecated;
+
+	Snippets(FileCollection configurationPropertyMetadata, boolean deprecated) {
 		this.properties = ConfigurationProperties.fromFiles(configurationPropertyMetadata);
+		this.deprecated = deprecated;
 	}
 
 	void add(String anchor, String title, Consumer<Snippet.Config> config) {
@@ -52,13 +45,15 @@ class Snippets {
 
 	void writeTo(Path outputDirectory) throws IOException {
 		createDirectory(outputDirectory);
-		Set<String> remaining = this.properties.stream().filter((property) -> !property.isDeprecated())
-				.map(ConfigurationProperty::getName).collect(Collectors.toSet());
+		Set<String> remaining = this.properties.stream()
+			.filter(this::shouldAdd)
+			.map(ConfigurationProperty::getName)
+			.collect(Collectors.toSet());
 		for (Snippet snippet : this.snippets) {
 			Set<String> written = writeSnippet(outputDirectory, snippet, remaining);
 			remaining.removeAll(written);
 		}
-		if (!remaining.isEmpty()) {
+		if (!this.deprecated && !remaining.isEmpty()) {
 			throw new IllegalStateException(
 					"The following keys were not written to the documentation: " + String.join(", ", remaining));
 		}
@@ -68,18 +63,22 @@ class Snippets {
 		Table table = new Table();
 		Set<String> added = new HashSet<>();
 		snippet.forEachOverride((prefix, description) -> {
-			CompoundRow row = new CompoundRow(snippet, prefix, description);
+			CompoundRow row = new CompoundRow(snippet, prefix, (!this.deprecated) ? description : "");
 			remaining.stream().filter((candidate) -> candidate.startsWith(prefix)).forEach((name) -> {
-				if (added.add(name)) {
-					row.addProperty(this.properties.get(name));
+				ConfigurationProperty property = this.properties.get(name);
+				if (shouldAdd(property) && added.add(name)) {
+					row.addProperty(property);
 				}
 			});
-			table.addRow(row);
+			if (!row.isEmpty()) {
+				table.addRow(row);
+			}
 		});
 		snippet.forEachPrefix((prefix) -> {
 			remaining.stream().filter((candidate) -> candidate.startsWith(prefix)).forEach((name) -> {
-				if (added.add(name)) {
-					table.addRow(new SingleRow(snippet, this.properties.get(name)));
+				ConfigurationProperty property = this.properties.get(name);
+				if (shouldAdd(property) && added.add(name)) {
+					table.addRow(new SingleRow(this, snippet, property));
 				}
 			});
 		});
@@ -88,23 +87,50 @@ class Snippets {
 		return added;
 	}
 
+	String findXref(String name) {
+		ConfigurationProperty property = this.properties.get(name);
+		if (property == null || property.isDeprecated()) {
+			return null;
+		}
+		for (Snippet snippet : this.snippets) {
+			for (String prefix : snippet.getOverrides().keySet()) {
+				if (name.startsWith(prefix)) {
+					return null;
+				}
+			}
+			for (String prefix : snippet.getPrefixes()) {
+				if (name.startsWith(prefix)) {
+					return "appendix:application-properties/index.adoc#%s.%s".formatted(snippet.getAnchor(), name);
+				}
+			}
+		}
+		return null;
+	}
+
+	private boolean shouldAdd(ConfigurationProperty property) {
+		return (property == null || (property.isDeprecated() == this.deprecated && !deprecatedAtErrorLevel(property)));
+	}
+
+	private boolean deprecatedAtErrorLevel(ConfigurationProperty property) {
+		Deprecation deprecation = property.getDeprecation();
+		return deprecation != null && "error".equals(deprecation.level());
+	}
+
 	private Asciidoc getAsciidoc(Snippet snippet, Table table) {
 		Asciidoc asciidoc = new Asciidoc();
-		// We have to prepend 'appendix.' as a section id here, otherwise the
-		// spring-asciidoctor-extensions:section-id asciidoctor extension complains
-		asciidoc.appendln("[[appendix." + snippet.getAnchor() + "]]");
-		asciidoc.appendln("== ", snippet.getTitle());
-		table.write(asciidoc);
+		if (!table.isEmpty()) {
+			// We have to prepend 'appendix.' as a section id here, otherwise the
+			// spring-asciidoctor-extensions:section-id asciidoctor extension complains
+			asciidoc.appendln("[[appendix." + ((this.deprecated) ? "deprecated-" : "") + snippet.getAnchor() + "]]");
+			asciidoc.appendln("== ", ((this.deprecated) ? "Deprecated " : "") + snippet.getTitle());
+			table.write(asciidoc);
+		}
 		return asciidoc;
 	}
 
 	private void writeAsciidoc(Path outputDirectory, Snippet snippet, Asciidoc asciidoc) throws IOException {
 		String[] parts = (snippet.getAnchor()).split("\\.");
-		Path path = outputDirectory;
-		for (int i = 0; i < parts.length; i++) {
-			String name = (i < parts.length - 1) ? parts[i] : parts[i] + ".adoc";
-			path = path.resolve(name);
-		}
+		Path path = outputDirectory.resolve(parts[parts.length - 1] + ".adoc");
 		createDirectory(path.getParent());
 		Files.deleteIfExists(path);
 		try (OutputStream outputStream = Files.newOutputStream(path)) {

@@ -1,0 +1,15 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+package org.springframework.boot.sampleconfig;
+
+import jakarta.inject.Named;
+
+@Named
+public class MyNamedComponent {
+
+	MyNamedComponent() {
+	}
+
+}

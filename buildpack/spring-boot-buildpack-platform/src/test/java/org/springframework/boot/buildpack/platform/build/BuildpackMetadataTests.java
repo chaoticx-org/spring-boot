@@ -1,0 +1,69 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+package org.springframework.boot.buildpack.platform.build;
+
+import java.io.IOException;
+import java.util.Collections;
+
+import org.junit.jupiter.api.Test;
+
+import org.springframework.boot.buildpack.platform.docker.type.Image;
+import org.springframework.boot.buildpack.platform.docker.type.ImageConfig;
+import org.springframework.boot.buildpack.platform.json.AbstractJsonTests;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
+import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
+import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.mock;
+
+/**
+ * Tests for {@link BuildpackMetadata}.
+ *
+ * @author Scott Frederick
+ */
+class BuildpackMetadataTests extends AbstractJsonTests {
+
+	@Test
+	void fromImageLoadsMetadata() throws IOException {
+		Image image = Image.of(getContent("buildpack-image.json"));
+		BuildpackMetadata metadata = BuildpackMetadata.fromImage(image);
+		assertThat(metadata.getId()).isEqualTo("example/hello-universe");
+		assertThat(metadata.getVersion()).isEqualTo("0.0.1");
+	}
+
+	@Test
+	@SuppressWarnings("NullAway") // Test null check
+	void fromImageWhenImageIsNullThrowsException() {
+		assertThatIllegalArgumentException().isThrownBy(() -> BuildpackMetadata.fromImage(null))
+			.withMessage("'image' must not be null");
+	}
+
+	@Test
+	void fromImageWhenImageConfigIsNullThrowsException() {
+		Image image = mock(Image.class);
+		assertThatIllegalArgumentException().isThrownBy(() -> BuildpackMetadata.fromImage(image))
+			.withMessage("'imageConfig' must not be null");
+	}
+
+	@Test
+	void fromImageConfigWhenLabelIsMissingThrowsException() {
+		Image image = mock(Image.class);
+		ImageConfig imageConfig = mock(ImageConfig.class);
+		given(image.getConfig()).willReturn(imageConfig);
+		given(imageConfig.getLabels()).willReturn(Collections.singletonMap("alpha", "a"));
+		assertThatIllegalStateException().isThrownBy(() -> BuildpackMetadata.fromImage(image))
+			.withMessage("No 'io.buildpacks.buildpackage.metadata' label found in image config labels 'alpha'");
+	}
+
+	@Test
+	void fromJsonLoadsMetadata() throws IOException {
+		BuildpackMetadata metadata = BuildpackMetadata.fromJson(getContentAsString("buildpack-metadata.json"));
+		assertThat(metadata.getId()).isEqualTo("example/hello-universe");
+		assertThat(metadata.getVersion()).isEqualTo("0.0.1");
+		assertThat(metadata.getHomepage()).isEqualTo("https://github.com/example/tree/main/buildpacks/hello-universe");
+	}
+
+}

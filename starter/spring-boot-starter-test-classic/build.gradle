@@ -1,0 +1,20 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id "org.springframework.boot.starter"
+}
+
+description = "Classic starter for testing Spring Boot applications with libraries including JUnit Jupiter, Hamcrest and Mockito"
+
+dependencies {
+	api(project(":starter:spring-boot-starter-test"))
+
+	api(project(":module:spring-boot-test-classic-modules"))
+}
+
+checkRuntimeClasspathForConflicts {
+	ignore { name -> name.startsWith("mockito-extensions/") }
+}
+

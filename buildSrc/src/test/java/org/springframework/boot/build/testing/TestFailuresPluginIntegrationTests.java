@@ -1,17 +1,5 @@
 /*
- * Copyright 2012-2021 the original author or authors.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      https://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2012-present the original author or authors.
  */
 
 package org.springframework.boot.build.testing;
@@ -24,7 +12,6 @@ import java.io.PrintWriter;
 import java.io.StringReader;
 import java.util.List;
 import java.util.function.Consumer;
-import java.util.stream.Collectors;
 
 import org.gradle.testkit.runner.BuildResult;
 import org.gradle.testkit.runner.GradleRunner;
@@ -51,45 +38,61 @@ class TestFailuresPluginIntegrationTests {
 	@Test
 	void singleProject() {
 		createProject(this.projectDir);
-		BuildResult result = GradleRunner.create().withDebug(true).withProjectDir(this.projectDir)
-				.withArguments("build").withPluginClasspath().buildAndFail();
+		BuildResult result = GradleRunner.create()
+			.withDebug(true)
+			.withProjectDir(this.projectDir)
+			.withArguments("build")
+			.withPluginClasspath()
+			.buildAndFail();
 		assertThat(readLines(result.getOutput())).containsSequence("Found test failures in 1 test task:", "", ":test",
 				"    example.ExampleTests > bad()", "    example.ExampleTests > fail()",
-				"    example.MoreTests > bad()", "    example.MoreTests > fail()", "");
+				"    example.MoreTests > bad()", "    example.MoreTests > fail()");
 	}
 
 	@Test
 	void multiProject() {
 		createMultiProjectBuild();
-		BuildResult result = GradleRunner.create().withDebug(true).withProjectDir(this.projectDir)
-				.withArguments("build").withPluginClasspath().buildAndFail();
+		BuildResult result = GradleRunner.create()
+			.withDebug(true)
+			.withProjectDir(this.projectDir)
+			.withArguments("build")
+			.withPluginClasspath()
+			.buildAndFail();
 		assertThat(readLines(result.getOutput())).containsSequence("Found test failures in 1 test task:", "",
 				":project-one:test", "    example.ExampleTests > bad()", "    example.ExampleTests > fail()",
-				"    example.MoreTests > bad()", "    example.MoreTests > fail()", "");
+				"    example.MoreTests > bad()", "    example.MoreTests > fail()");
 	}
 
 	@Test
 	void multiProjectContinue() {
 		createMultiProjectBuild();
-		BuildResult result = GradleRunner.create().withDebug(true).withProjectDir(this.projectDir)
-				.withArguments("build", "--continue").withPluginClasspath().buildAndFail();
+		BuildResult result = GradleRunner.create()
+			.withDebug(true)
+			.withProjectDir(this.projectDir)
+			.withArguments("build", "--continue")
+			.withPluginClasspath()
+			.buildAndFail();
 		assertThat(readLines(result.getOutput())).containsSequence("Found test failures in 2 test tasks:", "",
 				":project-one:test", "    example.ExampleTests > bad()", "    example.ExampleTests > fail()",
 				"    example.MoreTests > bad()", "    example.MoreTests > fail()", "", ":project-two:test",
 				"    example.ExampleTests > bad()", "    example.ExampleTests > fail()",
-				"    example.MoreTests > bad()", "    example.MoreTests > fail()", "");
+				"    example.MoreTests > bad()", "    example.MoreTests > fail()");
 	}
 
 	@Test
 	void multiProjectParallel() {
 		createMultiProjectBuild();
-		BuildResult result = GradleRunner.create().withDebug(true).withProjectDir(this.projectDir)
-				.withArguments("build", "--parallel", "--stacktrace").withPluginClasspath().buildAndFail();
+		BuildResult result = GradleRunner.create()
+			.withDebug(true)
+			.withProjectDir(this.projectDir)
+			.withArguments("build", "--parallel", "--stacktrace")
+			.withPluginClasspath()
+			.buildAndFail();
 		assertThat(readLines(result.getOutput())).containsSequence("Found test failures in 2 test tasks:", "",
 				":project-one:test", "    example.ExampleTests > bad()", "    example.ExampleTests > fail()",
 				"    example.MoreTests > bad()", "    example.MoreTests > fail()", "", ":project-two:test",
 				"    example.ExampleTests > bad()", "    example.ExampleTests > fail()",
-				"    example.MoreTests > bad()", "    example.MoreTests > fail()", "");
+				"    example.MoreTests > bad()", "    example.MoreTests > fail()");
 	}
 
 	private void createProject(File dir) {
@@ -151,6 +154,7 @@ class TestFailuresPluginIntegrationTests {
 			writer.println("dependencies {");
 			writer.println("	testImplementation 'org.junit.jupiter:junit-jupiter:5.6.0'");
 			writer.println("	testImplementation 'org.assertj:assertj-core:3.11.1'");
+			writer.println("	testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.6.0'");
 			writer.println("}");
 			writer.println();
 			writer.println("test {");
@@ -170,7 +174,7 @@ class TestFailuresPluginIntegrationTests {
 
 	private List<String> readLines(String output) {
 		try (BufferedReader reader = new BufferedReader(new StringReader(output))) {
-			return reader.lines().collect(Collectors.toList());
+			return reader.lines().toList();
 		}
 		catch (IOException ex) {
 			throw new RuntimeException(ex);

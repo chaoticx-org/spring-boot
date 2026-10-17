@@ -1,0 +1,34 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id "java-library"
+	id "org.springframework.boot.auto-configuration"
+	id "org.springframework.boot.configuration-properties"
+	id "org.springframework.boot.deployed"
+	id "org.springframework.boot.optional-dependencies"
+}
+
+description = "Spring Boot Jackson"
+
+dependencies {
+	api(project(":core:spring-boot"))
+	api("tools.jackson.core:jackson-databind")
+
+	optional(project(":core:spring-boot-autoconfigure"))
+	optional(project(":core:spring-boot-test-autoconfigure"))
+	optional("org.springframework:spring-web")
+	optional("tools.jackson.dataformat:jackson-dataformat-cbor")
+	optional("tools.jackson.dataformat:jackson-dataformat-xml")
+	optional("tools.jackson.module:jackson-module-jakarta-xmlbind-annotations")
+
+	testImplementation(project(":core:spring-boot-test"))
+	testImplementation(project(":test-support:spring-boot-test-support"))
+	testImplementation("tools.jackson.module:jackson-module-kotlin")
+	testRuntimeOnly("ch.qos.logback:logback-classic")
+}
+
+tasks.named("compileTestJava") {
+	options.nullability.checking = "tests"
+}

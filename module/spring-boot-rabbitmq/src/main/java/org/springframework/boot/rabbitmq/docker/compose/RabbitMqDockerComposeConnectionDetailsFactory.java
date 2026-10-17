@@ -1,0 +1,94 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+package org.springframework.boot.rabbitmq.docker.compose;
+
+import java.util.List;
+
+import org.jspecify.annotations.Nullable;
+
+import org.springframework.boot.docker.compose.core.RunningService;
+import org.springframework.boot.docker.compose.service.connection.DockerComposeConnectionDetailsFactory;
+import org.springframework.boot.docker.compose.service.connection.DockerComposeConnectionSource;
+import org.springframework.boot.rabbitmq.autoconfigure.RabbitConnectionDetails;
+import org.springframework.boot.rabbitmq.autoconfigure.RabbitStreamConnectionDetails;
+import org.springframework.boot.ssl.SslBundle;
+
+/**
+ * {@link DockerComposeConnectionDetailsFactory} to create
+ * {@link RabbitStreamConnectionDetails} for a {@code rabbitmq} service.
+ *
+ * @author Andy Wilkinson
+ */
+class RabbitMqDockerComposeConnectionDetailsFactory
+		extends DockerComposeConnectionDetailsFactory<RabbitConnectionDetails> {
+
+	private static final int RABBITMQ_PORT = 5672;
+
+	private static final int RABBITMQ_TLS_PORT = 5671;
+
+	protected RabbitMqDockerComposeConnectionDetailsFactory() {
+		super("rabbitmq");
+	}
+
+	@Override
+	protected @Nullable RabbitConnectionDetails getDockerComposeConnectionDetails(
+			DockerComposeConnectionSource source) {
+		try {
+			return new RabbitDockerComposeConnectionDetails(source.getRunningService());
+		}
+		catch (IllegalStateException ex) {
+			return null;
+		}
+	}
+
+	/**
+	 * {@link RabbitConnectionDetails} backed by a {@code rabbitmq}
+	 * {@link RunningService}.
+	 */
+	static class RabbitDockerComposeConnectionDetails extends DockerComposeConnectionDetails
+			implements RabbitConnectionDetails {
+
+		private final RabbitMqEnvironment environment;
+
+		private final List<Address> addresses;
+
+		private final @Nullable SslBundle sslBundle;
+
+		protected RabbitDockerComposeConnectionDetails(RunningService service) {
+			super(service);
+			this.environment = new RabbitMqEnvironment(service.env());
+			this.sslBundle = getSslBundle(service);
+			int containerPort = (this.sslBundle != null) ? RABBITMQ_TLS_PORT : RABBITMQ_PORT;
+			this.addresses = List.of(new Address(service.host(), service.ports().get(containerPort)));
+		}
+
+		@Override
+		public @Nullable String getUsername() {
+			return this.environment.getUsername();
+		}
+
+		@Override
+		public @Nullable String getPassword() {
+			return this.environment.getPassword();
+		}
+
+		@Override
+		public @Nullable SslBundle getSslBundle() {
+			return this.sslBundle;
+		}
+
+		@Override
+		public String getVirtualHost() {
+			return this.environment.getVirtualHost();
+		}
+
+		@Override
+		public List<Address> getAddresses() {
+			return this.addresses;
+		}
+
+	}
+
+}

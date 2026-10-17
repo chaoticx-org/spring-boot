@@ -1,0 +1,14 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id 'java'
+	id 'org.springframework.boot' version '{version}'
+}
+
+bootBuildImage {
+	builder = "ghcr.io/spring-io/spring-boot-cnb-test-builder:0.0.4"
+	pullPolicy = "IF_NOT_PRESENT"
+	tags = [ "example.com/myapp:latest" ]
+}

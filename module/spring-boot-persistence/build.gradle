@@ -1,0 +1,35 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id "java-library"
+	id "org.springframework.boot.auto-configuration"
+	id "org.springframework.boot.configuration-properties"
+	id "org.springframework.boot.deployed"
+	id "org.springframework.boot.optional-dependencies"
+}
+
+description = "Spring Boot Persistence"
+
+dependencies {
+	api(project(":core:spring-boot"))
+	api("org.springframework:spring-tx")
+
+	optional(project(":core:spring-boot-autoconfigure"))
+
+	testImplementation(project(":core:spring-boot-test"))
+	testImplementation(project(":test-support:spring-boot-test-support"))
+	testImplementation("com.zaxxer:HikariCP")
+	testImplementation("jakarta.persistence:jakarta.persistence-api")
+	testImplementation("org.hibernate.orm:hibernate-core")
+	testImplementation("org.hsqldb:hsqldb")
+	testImplementation("org.springframework:spring-jdbc")
+	testImplementation("org.springframework:spring-orm")
+
+	testRuntimeOnly("ch.qos.logback:logback-classic")
+}
+
+tasks.named("compileTestJava") {
+	options.nullability.checking = "tests"
+}

@@ -1,0 +1,108 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+package org.springframework.boot.docker.compose.core;
+
+import java.nio.file.Files;
+import java.nio.file.LinkOption;
+import java.nio.file.Path;
+import java.time.Duration;
+import java.util.concurrent.atomic.AtomicReference;
+
+import org.awaitility.Awaitility;
+import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.DisabledOnOs;
+import org.junit.jupiter.api.condition.OS;
+
+import org.springframework.boot.testsupport.process.DisabledIfProcessUnavailable;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
+
+/**
+ * Tests for {@link ProcessRunner}.
+ *
+ * @author Moritz Halbritter
+ * @author Andy Wilkinson
+ * @author Phillip Webb
+ * @author Sebastien Tardif
+ */
+class ProcessRunnerTests {
+
+	private final ProcessRunner processRunner = new ProcessRunner();
+
+	@Test
+	void runWhenProcessDoesNotStart() {
+		assertThatExceptionOfType(ProcessStartException.class)
+			.isThrownBy(() -> this.processRunner.run("iverymuchdontexist", "--version"));
+	}
+
+	@Test
+	@DisabledOnOs(OS.WINDOWS)
+	void runWhenOutputConsumerThrowsDoesNotHang() throws InterruptedException {
+		Thread runner = new Thread(() -> this.processRunner.run((line) -> {
+			throw new IllegalStateException("boom");
+		}, "echo", "hello"), "process-runner-consumer-throw-test");
+		runner.start();
+		runner.join(Duration.ofSeconds(5).toMillis());
+		assertThat(runner.isAlive()).isFalse();
+	}
+
+	@Test
+	@DisabledOnOs(OS.WINDOWS)
+	void runWhenInterruptedDestroysChildProcess() throws Exception {
+		Path pidFile = Files.createTempFile("process-runner-", ".pid");
+		Files.delete(pidFile);
+		AtomicReference<Throwable> error = new AtomicReference<>();
+		Thread runner = new Thread(() -> {
+			try {
+				this.processRunner.run("sh", "-c", "echo $$ > '" + pidFile + "'; exec sleep 60");
+			}
+			catch (Throwable ex) {
+				error.set(ex);
+			}
+		}, "process-runner-interrupt-test");
+		runner.start();
+		Awaitility.await().until(() -> Files.exists(pidFile, LinkOption.NOFOLLOW_LINKS));
+		long pid = Long.parseLong(Files.readString(pidFile).trim());
+		assertThat(ProcessHandle.of(pid)).isPresent().get().matches(ProcessHandle::isAlive);
+		runner.interrupt();
+		runner.join(Duration.ofSeconds(5).toMillis());
+		assertThat(runner.isAlive()).isFalse();
+		assertThat(error.get()).isInstanceOf(IllegalStateException.class);
+		Awaitility.await().until(() -> !ProcessHandle.of(pid).map(ProcessHandle::isAlive).orElse(false));
+	}
+
+	@Nested
+	@DisabledIfProcessUnavailable("docker")
+	class WhenDockerIsAvailable {
+
+		@Test
+		void run() {
+			String out = ProcessRunnerTests.this.processRunner.run("docker", "--version");
+			assertThat(out).isNotEmpty();
+		}
+
+		@Test
+		void runWhenHasOutputConsumer() {
+			StringBuilder output = new StringBuilder();
+			ProcessRunnerTests.this.processRunner.run(output::append, "docker", "--version");
+			assertThat(output.toString()).isNotEmpty();
+		}
+
+		@Test
+		void runWhenProcessReturnsNonZeroExitCode() {
+			assertThatExceptionOfType(ProcessExitException.class)
+				.isThrownBy(() -> ProcessRunnerTests.this.processRunner.run("docker", "-thisdoesntwork"))
+				.satisfies((ex) -> {
+					assertThat(ex.getExitCode()).isGreaterThan(0);
+					assertThat(ex.getStdOut()).isEmpty();
+					assertThat(ex.getStdErr()).isNotEmpty();
+				});
+		}
+
+	}
+
+}

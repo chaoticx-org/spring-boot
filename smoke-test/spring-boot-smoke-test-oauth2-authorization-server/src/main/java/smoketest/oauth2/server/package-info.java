@@ -1,0 +1,8 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+@NullMarked
+package smoketest.oauth2.server;
+
+import org.jspecify.annotations.NullMarked;

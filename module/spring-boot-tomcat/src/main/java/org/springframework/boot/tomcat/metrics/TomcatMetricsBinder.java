@@ -1,0 +1,87 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+package org.springframework.boot.tomcat.metrics;
+
+import java.util.Collections;
+
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Tag;
+import io.micrometer.core.instrument.binder.tomcat.TomcatMetrics;
+import org.apache.catalina.Container;
+import org.apache.catalina.Context;
+import org.apache.catalina.Manager;
+import org.jspecify.annotations.Nullable;
+
+import org.springframework.beans.factory.DisposableBean;
+import org.springframework.boot.context.event.ApplicationStartedEvent;
+import org.springframework.boot.tomcat.TomcatWebServer;
+import org.springframework.boot.web.server.WebServer;
+import org.springframework.boot.web.server.context.WebServerApplicationContext;
+import org.springframework.context.ApplicationContext;
+import org.springframework.context.ApplicationListener;
+
+/**
+ * Binds {@link TomcatMetrics} in response to the {@link ApplicationStartedEvent}.
+ *
+ * @author Andy Wilkinson
+ * @since 4.0.0
+ */
+public class TomcatMetricsBinder implements ApplicationListener<ApplicationStartedEvent>, DisposableBean {
+
+	private final MeterRegistry meterRegistry;
+
+	private final Iterable<Tag> tags;
+
+	private volatile @Nullable TomcatMetrics tomcatMetrics;
+
+	public TomcatMetricsBinder(MeterRegistry meterRegistry) {
+		this(meterRegistry, Collections.emptyList());
+	}
+
+	public TomcatMetricsBinder(MeterRegistry meterRegistry, Iterable<Tag> tags) {
+		this.meterRegistry = meterRegistry;
+		this.tags = tags;
+	}
+
+	@Override
+	public void onApplicationEvent(ApplicationStartedEvent event) {
+		ApplicationContext applicationContext = event.getApplicationContext();
+		Manager manager = findManager(applicationContext);
+		TomcatMetrics tomcatMetrics = new TomcatMetrics(manager, this.tags);
+		tomcatMetrics.bindTo(this.meterRegistry);
+		this.tomcatMetrics = tomcatMetrics;
+	}
+
+	private @Nullable Manager findManager(ApplicationContext applicationContext) {
+		if (applicationContext instanceof WebServerApplicationContext webServerApplicationContext) {
+			WebServer webServer = webServerApplicationContext.getWebServer();
+			if (webServer instanceof TomcatWebServer tomcatWebServer) {
+				Context context = findContext(tomcatWebServer);
+				if (context != null) {
+					return context.getManager();
+				}
+			}
+		}
+		return null;
+	}
+
+	private @Nullable Context findContext(TomcatWebServer tomcatWebServer) {
+		for (Container container : tomcatWebServer.getTomcat().getHost().findChildren()) {
+			if (container instanceof Context context) {
+				return context;
+			}
+		}
+		return null;
+	}
+
+	@Override
+	public void destroy() {
+		TomcatMetrics tomcatMetrics = this.tomcatMetrics;
+		if (tomcatMetrics != null) {
+			tomcatMetrics.close();
+		}
+	}
+
+}

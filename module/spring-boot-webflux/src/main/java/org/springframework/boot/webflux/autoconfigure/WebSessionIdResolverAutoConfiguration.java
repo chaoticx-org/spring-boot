@@ -1,0 +1,69 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+package org.springframework.boot.webflux.autoconfigure;
+
+import reactor.core.publisher.Mono;
+
+import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication.Type;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.context.properties.PropertyMapper;
+import org.springframework.boot.web.server.Cookie;
+import org.springframework.boot.web.server.autoconfigure.ServerProperties;
+import org.springframework.context.annotation.Bean;
+import org.springframework.http.ResponseCookie.ResponseCookieBuilder;
+import org.springframework.util.StringUtils;
+import org.springframework.web.server.session.CookieWebSessionIdResolver;
+import org.springframework.web.server.session.WebSessionIdResolver;
+import org.springframework.web.server.session.WebSessionManager;
+
+/**
+ * Auto-configuration for {@link WebSessionIdResolver}.
+ *
+ * @author Phillip Webb
+ * @author Brian Clozel
+ * @author Weix Sun
+ * @since 4.0.0
+ */
+@AutoConfiguration
+@ConditionalOnWebApplication(type = Type.REACTIVE)
+@ConditionalOnClass({ WebSessionManager.class, Mono.class })
+@EnableConfigurationProperties({ WebFluxProperties.class, ServerProperties.class })
+public final class WebSessionIdResolverAutoConfiguration {
+
+	private final ServerProperties serverProperties;
+
+	WebSessionIdResolverAutoConfiguration(ServerProperties serverProperties, WebFluxProperties webFluxProperties) {
+		this.serverProperties = serverProperties;
+	}
+
+	@Bean
+	@ConditionalOnMissingBean
+	WebSessionIdResolver webSessionIdResolver() {
+		CookieWebSessionIdResolver resolver = new CookieWebSessionIdResolver();
+		String cookieName = this.serverProperties.getReactive().getSession().getCookie().getName();
+		if (StringUtils.hasText(cookieName)) {
+			resolver.setCookieName(cookieName);
+		}
+		resolver.addCookieInitializer(this::initializeCookie);
+		return resolver;
+	}
+
+	private void initializeCookie(ResponseCookieBuilder builder) {
+		Cookie cookie = this.serverProperties.getReactive().getSession().getCookie();
+		PropertyMapper map = PropertyMapper.get();
+		map.from(cookie::getDomain).to(builder::domain);
+		map.from(cookie::getPath).to(builder::path);
+		map.from(cookie::getHttpOnly).to(builder::httpOnly);
+		map.from(cookie::getSecure).to(builder::secure);
+		map.from(cookie::getMaxAge).to(builder::maxAge);
+		map.from(cookie::getPartitioned).to(builder::partitioned);
+		map.from(cookie::getSameSite).to((sameSite) -> builder.sameSite(sameSite.attributeValue()));
+	}
+
+}

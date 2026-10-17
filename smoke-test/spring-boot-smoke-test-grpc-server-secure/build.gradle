@@ -1,0 +1,52 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id "java"
+	id "com.google.protobuf"
+	id "org.springframework.boot.docker-test"
+}
+
+description = "Spring Boot gRPC server secure smoke test"
+
+dependencies {
+	implementation(project(":starter:spring-boot-starter-grpc-server"))
+	implementation(project(":starter:spring-boot-starter-security"))
+
+	testImplementation(project(":starter:spring-boot-starter-grpc-server-test"))
+}
+
+def dependenciesBom = project(":platform:spring-boot-dependencies").extensions.getByName("bom")
+def grpcJava = dependenciesBom.getLibrary("Grpc Java")
+def protobufJava = dependenciesBom.getLibrary("Protobuf Java")
+
+tasks.named("compileTestJava") {
+	options.nullability.checking = "tests"
+}
+
+nullability {
+	requireExplicitNullMarking = false
+}
+
+configurations.named { it.startsWith("protobufToolsLocator_") || it.toLowerCase().endsWith("protopath") }.all {
+	extendsFrom(configurations.dependencyManagement)
+}
+
+protobuf {
+	protoc {
+		artifact = "com.google.protobuf:protoc:${protobufJava.version}"
+	}
+	plugins {
+		grpc {
+			artifact = "io.grpc:protoc-gen-grpc-java:${grpcJava.version}"
+		}
+	}
+	generateProtoTasks {
+		all()*.plugins {
+			grpc {
+				option '@generated=omit'
+			}
+		}
+	}
+}

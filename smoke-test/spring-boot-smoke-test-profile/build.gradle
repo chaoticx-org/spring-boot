@@ -1,0 +1,20 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id "java"
+}
+
+description = "Spring Boot profile smoke test"
+
+dependencies {
+	implementation(project(":starter:spring-boot-starter-webmvc"))
+	implementation(project(":starter:spring-boot-starter-webflux"))
+
+	testImplementation(project(":starter:spring-boot-starter-test"))
+}
+
+tasks.named("compileTestJava") {
+	options.nullability.checking = "tests"
+}

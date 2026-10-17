@@ -1,0 +1,14 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id 'java'
+	id 'org.springframework.boot' version '{version}'
+	id 'war'
+}
+
+bootWar {
+	mainClass = 'com.example.Application'
+	{includeTools}
+}

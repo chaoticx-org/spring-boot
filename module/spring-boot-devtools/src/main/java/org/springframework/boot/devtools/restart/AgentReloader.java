@@ -1,0 +1,54 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+package org.springframework.boot.devtools.restart;
+
+import java.util.Collections;
+import java.util.LinkedHashSet;
+import java.util.Set;
+
+import org.jspecify.annotations.Nullable;
+
+import org.springframework.util.ClassUtils;
+
+/**
+ * Utility to determine if a Java agent based reloader (e.g. JRebel) is being used.
+ *
+ * @author Phillip Webb
+ * @since 1.3.0
+ */
+public abstract class AgentReloader {
+
+	private static final Set<String> AGENT_CLASSES;
+
+	static {
+		Set<String> agentClasses = new LinkedHashSet<>();
+		agentClasses.add("org.zeroturnaround.javarebel.Integration");
+		agentClasses.add("org.zeroturnaround.javarebel.ReloaderFactory");
+		agentClasses.add("org.hotswap.agent.HotswapAgent");
+		AGENT_CLASSES = Collections.unmodifiableSet(agentClasses);
+	}
+
+	private AgentReloader() {
+	}
+
+	/**
+	 * Determine if any agent reloader is active.
+	 * @return true if agent reloading is active
+	 */
+	public static boolean isActive() {
+		return isActive(null) || isActive(AgentReloader.class.getClassLoader())
+				|| isActive(ClassLoader.getSystemClassLoader());
+	}
+
+	private static boolean isActive(@Nullable ClassLoader classLoader) {
+		for (String agentClass : AGENT_CLASSES) {
+			if (ClassUtils.isPresent(agentClass, classLoader)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+}

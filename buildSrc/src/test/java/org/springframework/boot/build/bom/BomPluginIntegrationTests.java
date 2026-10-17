@@ -1,17 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      https://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2012-present the original author or authors.
  */
 
 package org.springframework.boot.build.bom;
@@ -55,6 +43,7 @@ class BomPluginIntegrationTests {
 		try (PrintWriter out = new PrintWriter(new FileWriter(this.buildFile))) {
 			out.println("plugins {");
 			out.println("    id 'org.springframework.boot.bom'");
+			out.println("    id 'org.springframework.boot.deployed'");
 			out.println("}");
 			out.println("bom {");
 			out.println("    library('ActiveMQ', '5.15.10') {");
@@ -91,6 +80,7 @@ class BomPluginIntegrationTests {
 		try (PrintWriter out = new PrintWriter(new FileWriter(this.buildFile))) {
 			out.println("plugins {");
 			out.println("    id 'org.springframework.boot.bom'");
+			out.println("    id 'org.springframework.boot.deployed'");
 			out.println("}");
 			out.println("bom {");
 			out.println("    library('Flyway', '6.0.8') {");
@@ -118,13 +108,12 @@ class BomPluginIntegrationTests {
 		try (PrintWriter out = new PrintWriter(new FileWriter(this.buildFile))) {
 			out.println("plugins {");
 			out.println("    id 'org.springframework.boot.bom'");
+			out.println("    id 'org.springframework.boot.deployed'");
 			out.println("}");
 			out.println("bom {");
 			out.println("    library('Jackson Bom', '2.10.0') {");
 			out.println("        group('com.fasterxml.jackson') {");
-			out.println("            imports = [");
-			out.println("                'jackson-bom'");
-			out.println("            ]");
+			out.println("            bom('jackson-bom')");
 			out.println("        }");
 			out.println("    }");
 			out.println("}");
@@ -146,6 +135,7 @@ class BomPluginIntegrationTests {
 		try (PrintWriter out = new PrintWriter(new FileWriter(this.buildFile))) {
 			out.println("plugins {");
 			out.println("    id 'org.springframework.boot.bom'");
+			out.println("    id 'org.springframework.boot.deployed'");
 			out.println("}");
 			out.println("bom {");
 			out.println("    library('MySQL', '8.0.18') {");
@@ -179,6 +169,7 @@ class BomPluginIntegrationTests {
 		try (PrintWriter out = new PrintWriter(new FileWriter(this.buildFile))) {
 			out.println("plugins {");
 			out.println("    id 'org.springframework.boot.bom'");
+			out.println("    id 'org.springframework.boot.deployed'");
 			out.println("}");
 			out.println("bom {");
 			out.println("    library('Elasticsearch', '7.15.2') {");
@@ -210,6 +201,7 @@ class BomPluginIntegrationTests {
 		try (PrintWriter out = new PrintWriter(new FileWriter(this.buildFile))) {
 			out.println("plugins {");
 			out.println("    id 'org.springframework.boot.bom'");
+			out.println("    id 'org.springframework.boot.deployed'");
 			out.println("}");
 			out.println("bom {");
 			out.println("    library('Kafka', '2.7.2') {");
@@ -268,6 +260,7 @@ class BomPluginIntegrationTests {
 		try (PrintWriter out = new PrintWriter(new FileWriter(this.buildFile))) {
 			out.println("plugins {");
 			out.println("    id 'org.springframework.boot.bom'");
+			out.println("    id 'org.springframework.boot.deployed'");
 			out.println("}");
 			out.println("bom {");
 			out.println("    library('Spring Boot', '1.2.3') {");
@@ -290,37 +283,13 @@ class BomPluginIntegrationTests {
 		});
 	}
 
-	// @Test
-	// void versionAlignmentIsVerified() throws IOException {
-	// try (PrintWriter out = new PrintWriter(new FileWriter(this.buildFile))) {
-	// out.println("plugins {");
-	// out.println(" id 'org.springframework.boot.bom'");
-	// out.println("}");
-	// out.println("bom {");
-	// out.println(" library('OAuth2 OIDC SDK', '8.36.1') {");
-	// out.println(" alignedWith('Spring Security') {");
-	// out.println(
-	// "
-	// source('https://github.com/spring-projects/spring-security/blob/${libraryVersion}/config/gradle/dependency-locks/optional.lockfile')");
-	// out.println(" pattern('com.nimbusds:oauth2-oidc-sdk:(.+)')");
-	// out.println(" }");
-	// out.println(" group('com.nimbusds') {");
-	// out.println(" modules = [");
-	// out.println(" 'oauth2-oidc-sdk'");
-	// out.println(" ]");
-	// out.println(" }");
-	// out.println(" }");
-	// out.println(" library('Spring Security', '5.4.7') {");
-	// out.println(" }");
-	// out.println("}");
-	// }
-	// System.out.println(runGradle(DeployedPlugin.GENERATE_POM_TASK_NAME,
-	// "-s").getOutput());
-	// }
-
 	private BuildResult runGradle(String... args) {
-		return GradleRunner.create().withDebug(true).withProjectDir(this.projectDir).withArguments(args)
-				.withPluginClasspath().build();
+		return GradleRunner.create()
+			.withDebug(true)
+			.withProjectDir(this.projectDir)
+			.withArguments(args)
+			.withPluginClasspath()
+			.build();
 	}
 
 	private void generatePom(Consumer<NodeAssert> consumer) {

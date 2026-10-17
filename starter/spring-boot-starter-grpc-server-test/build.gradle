@@ -1,0 +1,18 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id "org.springframework.boot.starter"
+}
+
+description = "Starter for testing gRPC server"
+
+dependencies {
+	api(project(":starter:spring-boot-starter-test"))
+
+	api(project(":module:spring-boot-grpc-client"))
+	api(project(":module:spring-boot-grpc-test"))
+	api("io.grpc:grpc-inprocess")
+	api("io.grpc:grpc-stub")
+}

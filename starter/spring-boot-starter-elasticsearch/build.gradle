@@ -1,0 +1,16 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id "org.springframework.boot.starter"
+}
+
+description = "Starter for using Elasticsearch search and analytics engine"
+
+dependencies {
+	api(project(":starter:spring-boot-starter"))
+
+	api(project(":module:spring-boot-elasticsearch"))
+	api("co.elastic.clients:elasticsearch-java")
+}

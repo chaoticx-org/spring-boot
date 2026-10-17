@@ -1,0 +1,56 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id 'java-gradle-plugin'
+	id "org.springframework.boot.system-test"
+}
+
+description = "Spring Boot Image Building Tests"
+
+configurations {
+	app
+	providedRuntime {
+		extendsFrom dependencyManagement
+	}
+}
+
+tasks.register("syncMavenRepository", Sync) {
+	from configurations.app
+	into layout.buildDirectory.dir("system-test-maven-repository")
+}
+
+systemTest {
+	dependsOn syncMavenRepository
+	systemProperty "springBootVersion",
+			providers.gradleProperty("springBootVersion").getOrElse(project.getVersion().toString())
+}
+
+dependencies {
+	app project(path: ":build-plugin:spring-boot-gradle-plugin", configuration: "mavenRepository")
+	app project(path: ":starter:spring-boot-starter-webmvc", configuration: "mavenRepository")
+
+	implementation(project(":starter:spring-boot-starter-webmvc")) {
+		exclude group: "org.hibernate.validator"
+	}
+
+	systemTestImplementation(project(":buildpack:spring-boot-buildpack-platform"))
+	systemTestImplementation(project(":starter:spring-boot-starter-test"))
+	systemTestImplementation(project(":test-support:spring-boot-gradle-test-support"))
+	systemTestImplementation(gradleTestKit())
+	systemTestImplementation("org.assertj:assertj-core")
+	systemTestImplementation("org.testcontainers:testcontainers-junit-jupiter")
+}
+
+toolchain {
+	maximumCompatibleJavaVersion = JavaLanguageVersion.of(23)
+}
+
+tasks.named("compileTestJava") {
+	options.nullability.checking = "tests"
+}
+
+tasks.named("compileSystemTestJava") {
+	options.nullability.checking = "tests"
+}

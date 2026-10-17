@@ -1,0 +1,78 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+package org.springframework.boot.rabbitmq.docker.compose;
+
+import com.rabbitmq.client.Connection;
+import com.rabbitmq.client.ConnectionFactory;
+import com.rabbitmq.client.SocketConfigurators;
+
+import org.springframework.boot.docker.compose.service.connection.test.DockerComposeTest;
+import org.springframework.boot.rabbitmq.autoconfigure.RabbitConnectionDetails;
+import org.springframework.boot.rabbitmq.autoconfigure.RabbitConnectionDetails.Address;
+import org.springframework.boot.ssl.SslBundle;
+import org.springframework.boot.testsupport.container.TestImage;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/**
+ * Integration tests for {@link RabbitMqDockerComposeConnectionDetailsFactory}.
+ *
+ * @author Moritz Halbritter
+ * @author Andy Wilkinson
+ * @author Phillip Webb
+ * @author Scott Frederick
+ */
+class RabbitMqDockerComposeConnectionDetailsFactoryIntegrationTests {
+
+	@DockerComposeTest(composeFile = "rabbitmq-compose.yaml", image = TestImage.RABBITMQ)
+	void runCreatesConnectionDetails(RabbitConnectionDetails connectionDetails) throws Exception {
+		assertConnectionDetails(connectionDetails);
+		assertThat(connectionDetails.getSslBundle()).isNull();
+	}
+
+	@DockerComposeTest(composeFile = "rabbitmq-ssl-compose.yaml", image = TestImage.RABBITMQ,
+			additionalResources = { "../../ca.crt", "../../server.crt", "../../server.key", "../../client.crt",
+					"../../client.key", "rabbitmq-ssl.conf" })
+	void runWithSslCreatesConnectionDetails(RabbitConnectionDetails connectionDetails) throws Exception {
+		assertConnectionDetails(connectionDetails);
+		assertThat(connectionDetails.getSslBundle()).isNotNull();
+	}
+
+	@DockerComposeTest(composeFile = "rabbitmq-with-default-vhost-compose.yaml", image = TestImage.RABBITMQ)
+	void runWithDefaultVirtualHostCreatesConnectionDetails(RabbitConnectionDetails connectionDetails) throws Exception {
+		assertThat(connectionDetails.getVirtualHost()).isEqualTo("app");
+		assertThatConnectionCanBeMade(connectionDetails);
+	}
+
+	private void assertConnectionDetails(RabbitConnectionDetails connectionDetails) throws Exception {
+		assertThat(connectionDetails.getUsername()).isEqualTo("myuser");
+		assertThat(connectionDetails.getPassword()).isEqualTo("secret");
+		assertThat(connectionDetails.getVirtualHost()).isEqualTo("/");
+		assertThat(connectionDetails.getAddresses()).hasSize(1);
+		Address address = connectionDetails.getFirstAddress();
+		assertThat(address.host()).isNotNull();
+		assertThat(address.port()).isGreaterThan(0);
+		assertThatConnectionCanBeMade(connectionDetails);
+	}
+
+	private void assertThatConnectionCanBeMade(RabbitConnectionDetails connectionDetails) throws Exception {
+		ConnectionFactory connectionFactory = new ConnectionFactory();
+		Address address = connectionDetails.getFirstAddress();
+		connectionFactory.setHost(address.host());
+		connectionFactory.setPort(address.port());
+		connectionFactory.setUsername(connectionDetails.getUsername());
+		connectionFactory.setPassword(connectionDetails.getPassword());
+		connectionFactory.setVirtualHost(connectionDetails.getVirtualHost());
+		SslBundle sslBundle = connectionDetails.getSslBundle();
+		if (sslBundle != null) {
+			connectionFactory.useSslProtocol(sslBundle.createSslContext());
+			connectionFactory.setSocketConfigurator(SocketConfigurators.defaultConfigurator());
+		}
+		try (Connection connection = connectionFactory.newConnection()) {
+			assertThat(connection.isOpen()).isTrue();
+		}
+	}
+
+}

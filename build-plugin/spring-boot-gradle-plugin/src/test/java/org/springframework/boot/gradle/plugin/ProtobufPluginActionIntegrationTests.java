@@ -1,0 +1,95 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+package org.springframework.boot.gradle.plugin;
+
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.TestTemplate;
+
+import org.springframework.boot.gradle.junit.GradleCompatibility;
+import org.springframework.boot.testsupport.gradle.testkit.GradleBuild;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/**
+ * Integration tests for {@link ProtobufPluginAction}.
+ *
+ * @author Andy Wilkinson
+ * @author Dongliang Xie
+ */
+@GradleCompatibility
+class ProtobufPluginActionIntegrationTests {
+
+	@SuppressWarnings("NullAway.Init")
+	GradleBuild gradleBuild;
+
+	@BeforeEach
+	void prepareGradleBuild() {
+		this.gradleBuild.expectDeprecationWarningsWithAtLeastVersion("9.7.0")
+			.expectDeprecationMessages("The Configuration.setVisible(boolean) method has been deprecated");
+	}
+
+	@TestTemplate
+	void configuresProtocArtifact() {
+		assertThat(this.gradleBuild.build("protocArtifact").getOutput())
+			.contains("protoc artifact: 'com.google.protobuf:protoc'");
+	}
+
+	@TestTemplate
+	void configuresGrpcPlugin() {
+		assertThat(this.gradleBuild.build("grpcPlugin").getOutput())
+			.contains("grpc plugin artifact: 'io.grpc:protoc-gen-grpc-java'");
+	}
+
+	@TestTemplate
+	void configuresGenerateProtoTasksToOmitGenerated() {
+		assertThat(this.gradleBuild.build("generateProtoTasksGrpcPluginOptions").getOutput())
+			.contains("generateProto: [[@generated=omit]]")
+			.contains("generateTestProto: [[@generated=omit]]");
+	}
+
+	@TestTemplate
+	void alignsVersionOfProtocDependency() {
+		assertThat(this.gradleBuild.build("dependencies", "--configuration", "protobufToolsLocator_protoc").getOutput())
+			.contains("com.google.protobuf:protoc:null -> 4.34.0");
+	}
+
+	@TestTemplate
+	void generatesProtoSourcesWhenProtobufJavaProvidesProtocVersion() throws IOException {
+		File proto = new File(this.gradleBuild.getProjectDir(), "src/main/proto/example.proto");
+		proto.getParentFile().mkdirs();
+		Files.writeString(proto.toPath(), """
+				syntax = "proto3";
+				option java_package = "com.example";
+				message Example {
+				  string name = 1;
+				}
+				""");
+		this.gradleBuild.build("generateProto");
+	}
+
+	@TestTemplate
+	void alignsVersionOfGrpcDependency() {
+		assertThat(this.gradleBuild.build("dependencies", "--configuration", "protobufToolsLocator_grpc").getOutput())
+			.contains("io.grpc:protoc-gen-grpc-java:null -> 1.79.0");
+	}
+
+	@TestTemplate
+	void usesVersionOfProtocDependencyWhenSpecified() {
+		assertThat(this.gradleBuild.build("dependencies", "--configuration", "protobufToolsLocator_protoc").getOutput())
+			.contains("com.google.protobuf:protoc:4.33.5");
+	}
+
+	@TestTemplate
+	void usesVersionOfGrpcPluginDependencyWhenSpecified() {
+		assertThat(this.gradleBuild.build("dependencies", "--configuration", "protobufToolsLocator_grpc").getOutput())
+			.contains("io.grpc:protoc-gen-grpc-java:1.78.0");
+
+	}
+
+}

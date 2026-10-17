@@ -1,0 +1,123 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+package org.springframework.boot.buildpack.platform.build;
+
+import java.io.IOException;
+import java.io.OutputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+
+import org.apache.commons.compress.archivers.ArchiveEntry;
+import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
+import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
+import org.apache.commons.compress.archivers.tar.TarArchiveOutputStream;
+import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream;
+import org.jspecify.annotations.Nullable;
+
+import org.springframework.boot.buildpack.platform.docker.type.Layer;
+import org.springframework.boot.buildpack.platform.io.IOConsumer;
+import org.springframework.util.Assert;
+import org.springframework.util.StreamUtils;
+
+/**
+ * A {@link Buildpack} that references a buildpack contained in a local gzipped tar
+ * archive file.
+ *
+ * The archive must contain a buildpack descriptor named {@code buildpack.toml} at the
+ * root of the archive. The contents of the archive will be provided as a single layer to
+ * be included in the builder image.
+ *
+ * @author Scott Frederick
+ */
+final class TarGzipBuildpack implements Buildpack {
+
+	private final Path path;
+
+	private final BuildpackCoordinates coordinates;
+
+	private TarGzipBuildpack(Path path) {
+		this.path = path;
+		this.coordinates = findBuildpackCoordinates(path);
+	}
+
+	private BuildpackCoordinates findBuildpackCoordinates(Path path) {
+		try {
+			try (TarArchiveInputStream tar = new TarArchiveInputStream(
+					new GzipCompressorInputStream(Files.newInputStream(path)))) {
+				ArchiveEntry entry = tar.getNextEntry();
+				while (entry != null) {
+					if ("buildpack.toml".equals(entry.getName())) {
+						return BuildpackCoordinates.fromToml(tar, path);
+					}
+					entry = tar.getNextEntry();
+				}
+				throw new IllegalArgumentException(
+						"Buildpack descriptor 'buildpack.toml' is required in buildpack '" + path + "'");
+			}
+		}
+		catch (IOException ex) {
+			throw new RuntimeException("Error parsing descriptor for buildpack '" + path + "'", ex);
+		}
+	}
+
+	@Override
+	public BuildpackCoordinates getCoordinates() {
+		return this.coordinates;
+	}
+
+	@Override
+	public void apply(IOConsumer<Layer> layers) throws IOException {
+		layers.accept(Layer.fromTarArchive(this::copyAndRebaseEntries));
+	}
+
+	private void copyAndRebaseEntries(OutputStream outputStream) throws IOException {
+		String id = this.coordinates.getSanitizedId();
+		Path basePath = Paths.get("/cnb/buildpacks/", id, this.coordinates.getVersion());
+		try (TarArchiveInputStream tarInputStream = new TarArchiveInputStream(
+				new GzipCompressorInputStream(Files.newInputStream(this.path)));
+				TarArchiveOutputStream tarOutputStream = new TarArchiveOutputStream(outputStream)) {
+			writeBasePathEntries(tarOutputStream, basePath);
+			TarArchiveEntry entry = tarInputStream.getNextEntry();
+			while (entry != null) {
+				String entryName = entry.getName();
+				Path entryPath = basePath.resolve(entryName);
+				Assert.state(entryPath.toAbsolutePath().normalize().startsWith(basePath.toAbsolutePath()),
+						() -> "Entry '%s' cannot be written outside of '%s'".formatted(entryName, basePath));
+				entry.setName(basePath + "/" + entryName);
+				tarOutputStream.putArchiveEntry(entry);
+				StreamUtils.copy(tarInputStream, tarOutputStream);
+				tarOutputStream.closeArchiveEntry();
+				entry = tarInputStream.getNextEntry();
+			}
+			tarOutputStream.finish();
+		}
+	}
+
+	private void writeBasePathEntries(TarArchiveOutputStream output, Path basePath) throws IOException {
+		int pathCount = basePath.getNameCount();
+		for (int pathIndex = 1; pathIndex < pathCount + 1; pathIndex++) {
+			String name = "/" + basePath.subpath(0, pathIndex) + "/";
+			TarArchiveEntry entry = new TarArchiveEntry(name);
+			output.putArchiveEntry(entry);
+			output.closeArchiveEntry();
+		}
+	}
+
+	/**
+	 * A {@link BuildpackResolver} compatible method to resolve tar-gzip buildpacks.
+	 * @param context the resolver context
+	 * @param reference the buildpack reference
+	 * @return the resolved {@link Buildpack} or {@code null}
+	 */
+	static @Nullable Buildpack resolve(BuildpackResolverContext context, BuildpackReference reference) {
+		Path path = reference.asPath();
+		if (path != null && Files.exists(path) && Files.isRegularFile(path)) {
+			return new TarGzipBuildpack(path);
+		}
+		return null;
+	}
+
+}

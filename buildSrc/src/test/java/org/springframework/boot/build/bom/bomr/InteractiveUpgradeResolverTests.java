@@ -1,0 +1,59 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+package org.springframework.boot.build.bom.bomr;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import org.gradle.api.internal.tasks.userinput.UserInputHandler;
+import org.gradle.api.provider.Provider;
+import org.junit.jupiter.api.Test;
+
+import org.springframework.boot.build.bom.Library;
+import org.springframework.boot.build.bom.bomr.version.DependencyVersion;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.mock;
+
+/**
+ * Tests for {@link InteractiveUpgradeResolver}.
+ *
+ * @author Phillip Webb
+ */
+class InteractiveUpgradeResolverTests {
+
+	@Test
+	void resolveUpgradeUpdateVersionNumberInLibrary() {
+		UserInputHandler userInputHandler = mock(UserInputHandler.class);
+		LibraryUpdateResolver libraryUpdateResolver = mock(LibraryUpdateResolver.class);
+		InteractiveUpgradeResolver upgradeResolver = new InteractiveUpgradeResolver(userInputHandler,
+				libraryUpdateResolver);
+		List<Library> libraries = new ArrayList<>();
+		DependencyVersion version = DependencyVersion.parse("1.0.0");
+		Library library = new Library("test", null, version, null, null, null, null, null, null, null, null, null);
+		libraries.add(library);
+		List<Library> librariesToUpgrade = new ArrayList<>();
+		librariesToUpgrade.add(library);
+		List<LibraryWithVersionOptions> updates = new ArrayList<>();
+		DependencyVersion updateVersion = DependencyVersion.parse("1.0.1");
+		VersionOption versionOption = new VersionOption(updateVersion);
+		updates.add(new LibraryWithVersionOptions(library, List.of(versionOption)));
+		given(libraryUpdateResolver.findLibraryUpdates(any(), any())).willReturn(updates);
+		Provider<Object> providerOfVersionOption = providerOf(versionOption);
+		given(userInputHandler.askUser(any())).willReturn(providerOfVersionOption);
+		List<Upgrade> upgrades = upgradeResolver.resolveUpgrades(librariesToUpgrade, libraries);
+		assertThat(upgrades.get(0).to().getVersion()).isEqualTo(updateVersion);
+	}
+
+	@SuppressWarnings({ "unchecked", "rawtypes" })
+	private <T> Provider<T> providerOf(VersionOption versionOption) {
+		Provider provider = mock(Provider.class);
+		given(provider.get()).willReturn(versionOption);
+		return provider;
+	}
+
+}

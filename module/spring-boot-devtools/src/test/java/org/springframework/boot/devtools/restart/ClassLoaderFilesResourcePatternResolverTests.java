@@ -1,0 +1,220 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+package org.springframework.boot.devtools.restart;
+
+import java.io.File;
+import java.io.IOException;
+import java.net.URI;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+
+import org.springframework.boot.devtools.restart.ClassLoaderFilesResourcePatternResolver.DeletedClassLoaderFileResource;
+import org.springframework.boot.devtools.restart.classloader.ClassLoaderFile;
+import org.springframework.boot.devtools.restart.classloader.ClassLoaderFile.Kind;
+import org.springframework.boot.devtools.restart.classloader.ClassLoaderFiles;
+import org.springframework.context.support.GenericApplicationContext;
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.core.io.ProtocolResolver;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.ResourceLoader;
+import org.springframework.mock.web.MockServletContext;
+import org.springframework.util.FileCopyUtils;
+import org.springframework.web.context.support.GenericWebApplicationContext;
+import org.springframework.web.context.support.ServletContextResource;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.then;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+
+/**
+ * Tests for {@link ClassLoaderFilesResourcePatternResolver}.
+ *
+ * @author Phillip Webb
+ * @author Andy Wilkinson
+ * @author Stephane Nicoll
+ * @author DongHoon Lee
+ */
+class ClassLoaderFilesResourcePatternResolverTests {
+
+	private ClassLoaderFiles files;
+
+	private ClassLoaderFilesResourcePatternResolver resolver;
+
+	@BeforeEach
+	void setup() {
+		this.files = new ClassLoaderFiles();
+		this.resolver = new ClassLoaderFilesResourcePatternResolver(new GenericApplicationContext(), this.files);
+	}
+
+	@Test
+	void getClassLoaderShouldReturnClassLoader() {
+		assertThat(this.resolver.getClassLoader()).isNotNull();
+	}
+
+	@Test
+	void getResourceShouldReturnResource() {
+		Resource resource = this.resolver.getResource("index.html");
+		assertThat(resource).isInstanceOf(ClassPathResource.class);
+	}
+
+	@Test
+	void getResourceWhenHasServletContextShouldReturnServletResource() {
+		GenericWebApplicationContext context = new GenericWebApplicationContext(new MockServletContext());
+		this.resolver = new ClassLoaderFilesResourcePatternResolver(context, this.files);
+		Resource resource = this.resolver.getResource("index.html");
+		assertThat(resource).isInstanceOf(ServletContextResource.class);
+	}
+
+	@Test
+	void getResourceWhenDeletedShouldReturnDeletedResource(@TempDir File directory) throws Exception {
+		File file = createFile(directory, "name.class");
+		this.files.addFile(directory.getName(), "name.class", new ClassLoaderFile(Kind.DELETED, null));
+		Resource resource = this.resolver.getResource("file:" + file.getAbsolutePath());
+		assertThat(resource).isInstanceOf(DeletedClassLoaderFileResource.class);
+	}
+
+	@Test
+	void getResourceWhenDeletedInAnotherSourceDirectoryShouldReturnDeletedResource(@TempDir File directory)
+			throws Exception {
+		File file = createFile(directory, "name.class");
+		this.files.addFile("one", "other.class", new ClassLoaderFile(Kind.ADDED, new byte[0]));
+		this.files.addFile("two", "name.class", new ClassLoaderFile(Kind.DELETED, null));
+		Resource resource = this.resolver.getResource("file:" + file.getAbsolutePath());
+		assertThat(resource).isInstanceOf(DeletedClassLoaderFileResource.class);
+	}
+
+	@Test
+	void getResourceWhenManyFilesAreDeletedShouldCheckResourceOnlyOnce() throws Exception {
+		Resource resource = mock(Resource.class);
+		given(resource.exists()).willReturn(true);
+		given(resource.getURI()).willReturn(URI.create("file:/app/classes/three.class"));
+		this.resolver = createResolverResolving("foo:some-file.txt", resource);
+		this.files.addFile("one", "one.class", new ClassLoaderFile(Kind.DELETED, null));
+		this.files.addFile("one", "two.class", new ClassLoaderFile(Kind.DELETED, null));
+		this.files.addFile("two", "three.class", new ClassLoaderFile(Kind.DELETED, null));
+		assertThat(this.resolver.getResource("foo:some-file.txt")).isInstanceOf(DeletedClassLoaderFileResource.class);
+		then(resource).should().exists();
+		then(resource).should().getURI();
+	}
+
+	@Test
+	void getResourceWhenNoFileIsDeletedShouldNotCheckResource() throws Exception {
+		Resource resource = mock(Resource.class);
+		this.resolver = createResolverResolving("foo:some-file.txt", resource);
+		this.files.addFile("one", "one.class", new ClassLoaderFile(Kind.ADDED, new byte[0]));
+		this.files.addFile("two", "two.class", new ClassLoaderFile(Kind.MODIFIED, new byte[0]));
+		assertThat(this.resolver.getResource("foo:some-file.txt")).isSameAs(resource);
+		then(resource).should(never()).exists();
+		then(resource).should(never()).getURI();
+	}
+
+	@Test
+	void getResourcesShouldReturnResources(@TempDir File directory) throws Exception {
+		File file = createFile(directory, "name.class");
+		Resource[] resources = this.resolver.getResources("file:" + directory.getAbsolutePath() + "/**");
+		assertThat(resources).extracting(Resource::getFile).containsExactly(file);
+	}
+
+	@Test
+	void getResourcesWhenDeletedShouldFilterDeleted(@TempDir File directory) throws Exception {
+		createFile(directory, "name.class");
+		this.files.addFile(directory.getName(), "name.class", new ClassLoaderFile(Kind.DELETED, null));
+		Resource[] resources = this.resolver.getResources("file:" + directory.getAbsolutePath() + "/**");
+		assertThat(resources).isEmpty();
+	}
+
+	@Test
+	void customResourceLoaderIsUsedInNonWebApplication() {
+		GenericApplicationContext context = new GenericApplicationContext();
+		ResourceLoader resourceLoader = mock(ResourceLoader.class);
+		context.setResourceLoader(resourceLoader);
+		this.resolver = new ClassLoaderFilesResourcePatternResolver(context, this.files);
+		this.resolver.getResource("foo.txt");
+		then(resourceLoader).should().getResource("foo.txt");
+	}
+
+	@Test
+	void customProtocolResolverIsUsedInNonWebApplication() {
+		GenericApplicationContext context = new GenericApplicationContext();
+		Resource resource = mock(Resource.class);
+		ProtocolResolver resolver = mockProtocolResolver("foo:some-file.txt", resource);
+		context.addProtocolResolver(resolver);
+		this.resolver = new ClassLoaderFilesResourcePatternResolver(context, this.files);
+		Resource actual = this.resolver.getResource("foo:some-file.txt");
+		assertThat(actual).isSameAs(resource);
+		then(resolver).should().resolve(eq("foo:some-file.txt"), any(ResourceLoader.class));
+	}
+
+	@Test
+	void customProtocolResolverRegisteredAfterCreationIsUsedInNonWebApplication() {
+		GenericApplicationContext context = new GenericApplicationContext();
+		Resource resource = mock(Resource.class);
+		this.resolver = new ClassLoaderFilesResourcePatternResolver(context, this.files);
+		ProtocolResolver resolver = mockProtocolResolver("foo:some-file.txt", resource);
+		context.addProtocolResolver(resolver);
+		Resource actual = this.resolver.getResource("foo:some-file.txt");
+		assertThat(actual).isSameAs(resource);
+		then(resolver).should().resolve(eq("foo:some-file.txt"), any(ResourceLoader.class));
+	}
+
+	@Test
+	void customResourceLoaderIsUsedInWebApplication() {
+		GenericWebApplicationContext context = new GenericWebApplicationContext(new MockServletContext());
+		ResourceLoader resourceLoader = mock(ResourceLoader.class);
+		context.setResourceLoader(resourceLoader);
+		this.resolver = new ClassLoaderFilesResourcePatternResolver(context, this.files);
+		this.resolver.getResource("foo.txt");
+		then(resourceLoader).should().getResource("foo.txt");
+	}
+
+	@Test
+	void customProtocolResolverIsUsedInWebApplication() {
+		GenericWebApplicationContext context = new GenericWebApplicationContext(new MockServletContext());
+		Resource resource = mock(Resource.class);
+		ProtocolResolver resolver = mockProtocolResolver("foo:some-file.txt", resource);
+		context.addProtocolResolver(resolver);
+		this.resolver = new ClassLoaderFilesResourcePatternResolver(context, this.files);
+		Resource actual = this.resolver.getResource("foo:some-file.txt");
+		assertThat(actual).isSameAs(resource);
+		then(resolver).should().resolve(eq("foo:some-file.txt"), any(ResourceLoader.class));
+	}
+
+	@Test
+	void customProtocolResolverRegisteredAfterCreationIsUsedInWebApplication() {
+		GenericWebApplicationContext context = new GenericWebApplicationContext(new MockServletContext());
+		Resource resource = mock(Resource.class);
+		this.resolver = new ClassLoaderFilesResourcePatternResolver(context, this.files);
+		ProtocolResolver resolver = mockProtocolResolver("foo:some-file.txt", resource);
+		context.addProtocolResolver(resolver);
+		Resource actual = this.resolver.getResource("foo:some-file.txt");
+		assertThat(actual).isSameAs(resource);
+		then(resolver).should().resolve(eq("foo:some-file.txt"), any(ResourceLoader.class));
+	}
+
+	private ClassLoaderFilesResourcePatternResolver createResolverResolving(String location, Resource resource) {
+		GenericApplicationContext context = new GenericApplicationContext();
+		context.addProtocolResolver(mockProtocolResolver(location, resource));
+		return new ClassLoaderFilesResourcePatternResolver(context, this.files);
+	}
+
+	private ProtocolResolver mockProtocolResolver(String path, Resource resource) {
+		ProtocolResolver resolver = mock(ProtocolResolver.class);
+		given(resolver.resolve(eq(path), any(ResourceLoader.class))).willReturn(resource);
+		return resolver;
+	}
+
+	private File createFile(File directory, String name) throws IOException {
+		File file = new File(directory, name);
+		FileCopyUtils.copy("test".getBytes(), file);
+		return file;
+	}
+
+}

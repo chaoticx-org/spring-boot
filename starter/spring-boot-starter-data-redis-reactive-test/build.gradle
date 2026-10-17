@@ -1,0 +1,17 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id "org.springframework.boot.starter"
+}
+
+description = "Starter for testing Redis key-value data store with Spring Data Redis reactive and the Lettuce client"
+
+dependencies {
+	api(project(":starter:spring-boot-starter-data-redis-reactive"))
+	api(project(":starter:spring-boot-starter-test"))
+
+	api(project(":module:spring-boot-data-redis-test"))
+	api("io.projectreactor:reactor-test")
+}

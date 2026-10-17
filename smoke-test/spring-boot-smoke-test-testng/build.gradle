@@ -1,0 +1,28 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id "java"
+}
+
+description = "Spring Boot TestNG smoke test"
+
+dependencies {
+	implementation(platform(project(":platform:spring-boot-dependencies")))
+	implementation(project(":starter:spring-boot-starter-webmvc"))
+
+	testImplementation(project(":starter:spring-boot-starter-restclient-test"))
+	testImplementation(project(":starter:spring-boot-starter-webmvc-test"))
+	testImplementation("org.assertj:assertj-core")
+	testImplementation("org.springframework:spring-test")
+	testImplementation("org.testng:testng:6.8.13")
+}
+
+test {
+	useTestNG()
+}
+
+tasks.named("compileTestJava") {
+	options.nullability.checking = "tests"
+}

@@ -1,0 +1,24 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id "java"
+}
+
+description = "Spring Boot web Groovy Templates smoke test"
+
+dependencies {
+	implementation(project(":starter:spring-boot-starter-groovy-templates"))
+	implementation(project(":starter:spring-boot-starter-validation"))
+	implementation(project(":starter:spring-boot-starter-webmvc"))
+	implementation("jakarta.xml.bind:jakarta.xml.bind-api")
+
+	testImplementation(project(":starter:spring-boot-starter-groovy-templates-test"))
+	testImplementation(project(":starter:spring-boot-starter-webmvc-test"))
+	testImplementation(project(":module:spring-boot-restclient"))
+}
+
+tasks.named("compileTestJava") {
+	options.nullability.checking = "tests"
+}

@@ -1,0 +1,82 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+package org.springframework.boot.webflux.autoconfigure;
+
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.observation.Observation;
+import io.micrometer.observation.ObservationRegistry;
+
+import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication.Type;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.micrometer.metrics.MaximumAllowableTagsMeterFilter;
+import org.springframework.boot.micrometer.metrics.autoconfigure.MetricsProperties;
+import org.springframework.boot.micrometer.observation.autoconfigure.ObservationProperties;
+import org.springframework.boot.micrometer.observation.autoconfigure.condition.ConditionalOnSemanticConventions;
+import org.springframework.boot.micrometer.observation.autoconfigure.condition.SemanticConventions;
+import org.springframework.context.annotation.Bean;
+import org.springframework.core.annotation.Order;
+import org.springframework.http.server.reactive.observation.DefaultServerRequestObservationConvention;
+import org.springframework.http.server.reactive.observation.OpenTelemetryServerRequestObservationConvention;
+import org.springframework.http.server.reactive.observation.ServerRequestObservationConvention;
+
+/**
+ * {@link EnableAutoConfiguration Auto-configuration} for instrumentation of Spring
+ * WebFlux applications.
+ *
+ * @author Brian Clozel
+ * @author Jon Schneider
+ * @author Dmytro Nosan
+ * @author Moritz Halbritter
+ * @since 4.0.0
+ */
+@AutoConfiguration(afterName = {
+		"org.springframework.boot.micrometer.metrics.autoconfigure.export.simple.SimpleMetricsExportAutoConfiguration",
+		"org.springframework.boot.micrometer.observation.autoconfigure.ObservationAutoConfiguration" })
+@ConditionalOnClass({ Observation.class, MeterRegistry.class })
+@ConditionalOnBean({ ObservationRegistry.class, MeterRegistry.class })
+@ConditionalOnWebApplication(type = Type.REACTIVE)
+@EnableConfigurationProperties({ MetricsProperties.class, ObservationProperties.class })
+public final class WebFluxObservationAutoConfiguration {
+
+	private final ObservationProperties observationProperties;
+
+	WebFluxObservationAutoConfiguration(ObservationProperties observationProperties) {
+		this.observationProperties = observationProperties;
+	}
+
+	@Bean
+	@Order(0)
+	MaximumAllowableTagsMeterFilter metricsHttpServerUriTagFilter(MetricsProperties metricsProperties) {
+		String meterNamePrefix = this.observationProperties.getHttp().getServer().getRequests().getName();
+		int maxUriTags = metricsProperties.getWeb().getServer().getMaxUriTags();
+		return new MaximumAllowableTagsMeterFilter(meterNamePrefix, "uri", maxUriTags);
+	}
+
+	@ConditionalOnMissingBean(ServerRequestObservationConvention.class)
+	static class ServerRequestObservationConventionConfiguration {
+
+		@Bean
+		@ConditionalOnSemanticConventions(SemanticConventions.MICROMETER)
+		DefaultServerRequestObservationConvention micrometerServerRequestObservationConvention(
+				ObservationProperties observationProperties) {
+			return new DefaultServerRequestObservationConvention(
+					observationProperties.getHttp().getServer().getRequests().getName());
+		}
+
+		@Bean
+		@ConditionalOnSemanticConventions(SemanticConventions.OPEN_TELEMETRY)
+		OpenTelemetryServerRequestObservationConvention openTelemetryServerRequestObservationConvention() {
+			return new OpenTelemetryServerRequestObservationConvention();
+		}
+
+	}
+
+}

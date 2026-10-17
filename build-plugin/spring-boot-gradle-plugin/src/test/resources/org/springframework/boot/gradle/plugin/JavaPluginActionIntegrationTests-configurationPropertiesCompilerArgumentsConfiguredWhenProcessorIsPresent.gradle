@@ -1,0 +1,22 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id 'java'
+	id 'org.springframework.boot' version '{version}'
+}
+
+repositories {
+	flatDir { dirs 'libs' }
+}
+
+dependencies {
+	annotationProcessor(':spring-boot-configuration-processor:1.2.3')
+}
+
+compileJava {
+	doLast {
+		println "${name} compiler args: ${options.compilerArgs}"
+	}
+}

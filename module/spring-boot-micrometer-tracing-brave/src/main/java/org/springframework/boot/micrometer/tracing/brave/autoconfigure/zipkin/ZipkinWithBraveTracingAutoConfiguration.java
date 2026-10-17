@@ -1,0 +1,56 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+package org.springframework.boot.micrometer.tracing.brave.autoconfigure.zipkin;
+
+import brave.Tag;
+import brave.Tags;
+import brave.handler.MutableSpan;
+import zipkin2.reporter.BytesEncoder;
+import zipkin2.reporter.BytesMessageSender;
+import zipkin2.reporter.Encoding;
+import zipkin2.reporter.brave.AsyncZipkinSpanHandler;
+import zipkin2.reporter.brave.MutableSpanBytesEncoder;
+
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.micrometer.tracing.autoconfigure.ConditionalOnEnabledTracingExport;
+import org.springframework.context.annotation.Bean;
+
+/**
+ * {@link EnableAutoConfiguration Auto-configuration} for Zipkin tracing with Brave.
+ *
+ * @author Moritz Halbritter
+ * @author Stefan Bratanov
+ * @author Wick Dynex
+ * @author Phillip Webb
+ * @since 4.0.0
+ */
+@AutoConfiguration(afterName = "org.springframework.boot.zipkin.autoconfigure.ZipkinAutoConfiguration")
+@ConditionalOnClass({ Encoding.class, AsyncZipkinSpanHandler.class })
+public final class ZipkinWithBraveTracingAutoConfiguration {
+
+	@Bean
+	@ConditionalOnBean(Encoding.class)
+	@ConditionalOnMissingBean(value = MutableSpan.class, parameterizedContainer = BytesEncoder.class)
+	BytesEncoder<MutableSpan> mutableSpanBytesEncoder(Encoding encoding,
+			ObjectProvider<Tag<Throwable>> throwableTagProvider) {
+		Tag<Throwable> throwableTag = throwableTagProvider.getIfAvailable(() -> Tags.ERROR);
+		return MutableSpanBytesEncoder.create(encoding, throwableTag);
+	}
+
+	@Bean
+	@ConditionalOnMissingBean
+	@ConditionalOnBean(BytesMessageSender.class)
+	@ConditionalOnEnabledTracingExport("zipkin")
+	AsyncZipkinSpanHandler asyncZipkinSpanHandler(BytesMessageSender sender,
+			BytesEncoder<MutableSpan> mutableSpanBytesEncoder) {
+		return AsyncZipkinSpanHandler.newBuilder(sender).build(mutableSpanBytesEncoder);
+	}
+
+}

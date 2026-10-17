@@ -1,0 +1,15 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id "org.springframework.boot.starter"
+}
+
+description = "Starter for testing Flyway database migrations"
+
+dependencies {
+	api(project(":starter:spring-boot-starter-flyway"))
+	api(project(":starter:spring-boot-starter-test"))
+	api(project(":starter:spring-boot-starter-jdbc-test"))
+}

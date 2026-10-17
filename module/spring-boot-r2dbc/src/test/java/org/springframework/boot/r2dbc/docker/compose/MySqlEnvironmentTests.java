@@ -1,0 +1,108 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+package org.springframework.boot.r2dbc.docker.compose;
+
+import java.util.Collections;
+import java.util.Map;
+
+import org.junit.jupiter.api.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
+
+/**
+ * Tests for {@link MySqlEnvironment}.
+ *
+ * @author Moritz Halbritter
+ * @author Andy Wilkinson
+ * @author Phillip Webb
+ * @author Jinseong Hwang
+ * @author Scott Frederick
+ */
+class MySqlEnvironmentTests {
+
+	@Test
+	void createWhenHasMysqlRandomRootPasswordThrowsException() {
+		assertThatIllegalStateException()
+			.isThrownBy(() -> new MySqlEnvironment(Map.of("MYSQL_RANDOM_ROOT_PASSWORD", "true")))
+			.withMessage("MYSQL_RANDOM_ROOT_PASSWORD is not supported without MYSQL_USER and MYSQL_PASSWORD");
+	}
+
+	@Test
+	void createWhenHasMysqlRandomRootPasswordAndMysqlUserWithoutPasswordThrowsException() {
+		assertThatIllegalStateException()
+			.isThrownBy(() -> new MySqlEnvironment(
+					Map.of("MYSQL_RANDOM_ROOT_PASSWORD", "true", "MYSQL_USER", "myself", "MYSQL_DATABASE", "db")))
+			.withMessage("MYSQL_RANDOM_ROOT_PASSWORD is not supported without MYSQL_USER and MYSQL_PASSWORD");
+	}
+
+	@Test
+	void getUsernameAndPasswordWhenHasMysqlRandomRootPasswordAndMysqlUserAndPassword() {
+		MySqlEnvironment environment = new MySqlEnvironment(Map.of("MYSQL_RANDOM_ROOT_PASSWORD", "true", "MYSQL_USER",
+				"myself", "MYSQL_PASSWORD", "secret", "MYSQL_DATABASE", "db"));
+		assertThat(environment.getUsername()).isEqualTo("myself");
+		assertThat(environment.getPassword()).isEqualTo("secret");
+	}
+
+	@Test
+	void createWhenHasNoPasswordThrowsException() {
+		assertThatIllegalStateException().isThrownBy(() -> new MySqlEnvironment(Collections.emptyMap()))
+			.withMessage("No MySQL password found");
+	}
+
+	@Test
+	void createWhenHasNoDatabaseThrowsException() {
+		assertThatIllegalStateException().isThrownBy(() -> new MySqlEnvironment(Map.of("MYSQL_PASSWORD", "secret")))
+			.withMessage("No MYSQL_DATABASE defined");
+	}
+
+	@Test
+	void getUsernameWhenHasMysqlUser() {
+		MySqlEnvironment environment = new MySqlEnvironment(
+				Map.of("MYSQL_USER", "myself", "MYSQL_PASSWORD", "secret", "MYSQL_DATABASE", "db"));
+		assertThat(environment.getUsername()).isEqualTo("myself");
+	}
+
+	@Test
+	void getUsernameWhenHasNoMysqlUser() {
+		MySqlEnvironment environment = new MySqlEnvironment(Map.of("MYSQL_PASSWORD", "secret", "MYSQL_DATABASE", "db"));
+		assertThat(environment.getUsername()).isEqualTo("root");
+	}
+
+	@Test
+	void getPasswordWhenHasMysqlPassword() {
+		MySqlEnvironment environment = new MySqlEnvironment(Map.of("MYSQL_PASSWORD", "secret", "MYSQL_DATABASE", "db"));
+		assertThat(environment.getPassword()).isEqualTo("secret");
+	}
+
+	@Test
+	void getPasswordWhenHasMysqlRootPassword() {
+		MySqlEnvironment environment = new MySqlEnvironment(
+				Map.of("MYSQL_ROOT_PASSWORD", "secret", "MYSQL_DATABASE", "db"));
+		assertThat(environment.getPassword()).isEqualTo("secret");
+	}
+
+	@Test
+	void getPasswordWhenHasNoPasswordAndMysqlAllowEmptyPassword() {
+		MySqlEnvironment environment = new MySqlEnvironment(
+				Map.of("MYSQL_ALLOW_EMPTY_PASSWORD", "true", "MYSQL_DATABASE", "db"));
+		assertThat(environment.getPassword()).isEmpty();
+	}
+
+	@Test
+	void getPasswordWhenHasNoPasswordAndAllowEmptyPassword() {
+		MySqlEnvironment environment = new MySqlEnvironment(
+				Map.of("ALLOW_EMPTY_PASSWORD", "true", "MYSQL_DATABASE", "db"));
+		assertThat(environment.getPassword()).isEmpty();
+	}
+
+	@Test
+	void getDatabaseWhenHasMysqlDatabase() {
+		MySqlEnvironment environment = new MySqlEnvironment(
+				Map.of("MYSQL_ALLOW_EMPTY_PASSWORD", "true", "MYSQL_DATABASE", "db"));
+		assertThat(environment.getDatabase()).isEqualTo("db");
+	}
+
+}

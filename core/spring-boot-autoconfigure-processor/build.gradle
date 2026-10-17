@@ -1,0 +1,20 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id "java-library"
+	id "org.springframework.boot.deployed"
+	id "org.springframework.boot.annotation-processor"
+}
+
+description = "Spring Boot AutoConfigure Annotation Processor"
+
+dependencies {
+	testImplementation(enforcedPlatform(project(":platform:spring-boot-dependencies")))
+	testImplementation(project(":test-support:spring-boot-test-support"))
+}
+
+nullability {
+	requireExplicitNullMarking = false
+}

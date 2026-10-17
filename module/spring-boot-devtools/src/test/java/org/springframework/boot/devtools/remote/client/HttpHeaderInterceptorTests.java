@@ -1,0 +1,96 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+package org.springframework.boot.devtools.remote.client;
+
+import java.io.IOException;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+import org.springframework.http.HttpRequest;
+import org.springframework.http.client.ClientHttpRequestExecution;
+import org.springframework.http.client.ClientHttpResponse;
+import org.springframework.http.server.ServletServerHttpRequest;
+import org.springframework.mock.web.MockHttpServletRequest;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
+import static org.mockito.BDDMockito.given;
+
+/**
+ * Tests for {@link HttpHeaderInterceptor}.
+ *
+ * @author Rob Winch
+ * @since 1.3.0
+ */
+@ExtendWith(MockitoExtension.class)
+class HttpHeaderInterceptorTests {
+
+	private String name;
+
+	private String value;
+
+	private HttpHeaderInterceptor interceptor;
+
+	private HttpRequest request;
+
+	private byte[] body;
+
+	@Mock
+	private ClientHttpRequestExecution execution;
+
+	@Mock
+	private ClientHttpResponse response;
+
+	private MockHttpServletRequest httpRequest;
+
+	@BeforeEach
+	void setup() {
+		this.body = new byte[] {};
+		this.httpRequest = new MockHttpServletRequest();
+		this.request = new ServletServerHttpRequest(this.httpRequest);
+		this.name = "X-AUTH-TOKEN";
+		this.value = "secret";
+		this.interceptor = new HttpHeaderInterceptor(this.name, this.value);
+	}
+
+	@Test
+	@SuppressWarnings("NullAway") // Test null check
+	void constructorNullHeaderName() {
+		assertThatIllegalArgumentException().isThrownBy(() -> new HttpHeaderInterceptor(null, this.value))
+			.withMessageContaining("'name' must not be empty");
+	}
+
+	@Test
+	void constructorEmptyHeaderName() {
+		assertThatIllegalArgumentException().isThrownBy(() -> new HttpHeaderInterceptor("", this.value))
+			.withMessageContaining("'name' must not be empty");
+	}
+
+	@Test
+	@SuppressWarnings("NullAway") // Test null check
+	void constructorNullHeaderValue() {
+		assertThatIllegalArgumentException().isThrownBy(() -> new HttpHeaderInterceptor(this.name, null))
+			.withMessageContaining("'value' must not be empty");
+	}
+
+	@Test
+	void constructorEmptyHeaderValue() {
+		assertThatIllegalArgumentException().isThrownBy(() -> new HttpHeaderInterceptor(this.name, ""))
+			.withMessageContaining("'value' must not be empty");
+	}
+
+	@Test
+	void intercept() throws IOException {
+		given(this.execution.execute(this.request, this.body)).willReturn(this.response);
+		ClientHttpResponse result = this.interceptor.intercept(this.request, this.body, this.execution);
+		assertThat(this.request.getHeaders().getFirst(this.name)).isEqualTo(this.value);
+		assertThat(result).isEqualTo(this.response);
+	}
+
+}

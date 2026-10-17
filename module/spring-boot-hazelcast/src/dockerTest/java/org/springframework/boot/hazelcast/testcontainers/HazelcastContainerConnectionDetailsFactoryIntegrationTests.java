@@ -1,0 +1,60 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+package org.springframework.boot.hazelcast.testcontainers;
+
+import java.util.UUID;
+
+import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.map.IMap;
+import org.junit.jupiter.api.Test;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.ImportAutoConfiguration;
+import org.springframework.boot.hazelcast.autoconfigure.HazelcastAutoConfiguration;
+import org.springframework.boot.hazelcast.autoconfigure.HazelcastConnectionDetails;
+import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.boot.testsupport.container.HazelcastContainer;
+import org.springframework.boot.testsupport.container.TestImage;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.test.context.junit.jupiter.SpringJUnitConfig;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/**
+ * Tests for {@link HazelcastContainerConnectionDetailsFactory}.
+ *
+ * @author Dmytro Nosan
+ */
+@SpringJUnitConfig
+@Testcontainers(disabledWithoutDocker = true)
+class HazelcastContainerConnectionDetailsFactoryIntegrationTests {
+
+	@Container
+	@ServiceConnection
+	static final HazelcastContainer hazelcast = TestImage.forContainer(HazelcastContainer.class);
+
+	@Autowired(required = false)
+	private HazelcastConnectionDetails connectionDetails;
+
+	@Autowired
+	private HazelcastInstance hazelcastInstance;
+
+	@Test
+	void connectionCanBeMadeToHazelcastContainer() {
+		assertThat(this.connectionDetails).isNotNull();
+		IMap<String, String> map = this.hazelcastInstance.getMap(UUID.randomUUID().toString());
+		map.put("test", "containers");
+		assertThat(map.get("test")).isEqualTo("containers");
+	}
+
+	@Configuration(proxyBeanMethods = false)
+	@ImportAutoConfiguration(HazelcastAutoConfiguration.class)
+	static class TestConfiguration {
+
+	}
+
+}

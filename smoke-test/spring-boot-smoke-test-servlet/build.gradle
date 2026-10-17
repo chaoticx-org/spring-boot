@@ -1,0 +1,24 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id "war"
+}
+
+description = "Spring Boot Servlet smoke test"
+
+dependencies {
+	compileOnly(project(":starter:spring-boot-starter-tomcat"))
+
+	implementation(project(":starter:spring-boot-starter-security"))
+
+	testImplementation(project(":module:spring-boot-restclient"))
+	testImplementation(project(":starter:spring-boot-starter-test"))
+
+	testRuntimeOnly(project(":starter:spring-boot-starter-tomcat"))
+}
+
+tasks.named("compileTestJava") {
+	options.nullability.checking = "tests"
+}

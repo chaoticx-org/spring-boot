@@ -1,0 +1,29 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id "war"
+	id "org.springframework.boot"
+}
+
+java {
+	sourceCompatibility = '17'
+	targetCompatibility = '17'
+}
+
+repositories {
+	maven { url = layout.projectDirectory.dir("../docker-test-maven-repository") }
+	mavenCentral()
+	spring.mavenRepositories()
+}
+
+dependencies {
+	implementation(platform(org.springframework.boot.gradle.plugin.SpringBootPlugin.BOM_COORDINATES))
+	implementation("org.springframework.boot:spring-boot-starter-webmvc")
+
+	providedRuntime(platform(org.springframework.boot.gradle.plugin.SpringBootPlugin.BOM_COORDINATES))
+	providedRuntime("org.springframework.boot:spring-boot-starter-tomcat-runtime")
+	providedRuntime("org.glassfish.web:jakarta.servlet.jsp.jstl")
+	providedRuntime("org.apache.tomcat.embed:tomcat-embed-jasper")
+}

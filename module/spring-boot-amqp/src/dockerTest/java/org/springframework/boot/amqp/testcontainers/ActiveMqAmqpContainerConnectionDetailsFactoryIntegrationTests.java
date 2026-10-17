@@ -1,0 +1,61 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+package org.springframework.boot.amqp.testcontainers;
+
+import java.util.UUID;
+import java.util.concurrent.TimeUnit;
+
+import org.junit.jupiter.api.Test;
+import org.testcontainers.activemq.ActiveMQContainer;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
+
+import org.springframework.amqp.client.AmqpClient;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.amqp.autoconfigure.AmqpAutoConfiguration;
+import org.springframework.boot.amqp.autoconfigure.AmqpConnectionDetails;
+import org.springframework.boot.autoconfigure.ImportAutoConfiguration;
+import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.boot.testsupport.container.TestImage;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.test.context.junit.jupiter.SpringJUnitConfig;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/**
+ * Tests for {@link ActiveMqAmqpContainerConnectionDetailsFactory}.
+ *
+ * @author Stephane Nicoll
+ */
+@SpringJUnitConfig
+@Testcontainers(disabledWithoutDocker = true)
+class ActiveMqAmqpContainerConnectionDetailsFactoryIntegrationTests {
+
+	@Container
+	@ServiceConnection
+	static final ActiveMQContainer container = TestImage.ACTIVE_MQ_CLASSIC.container();
+
+	@Autowired(required = false)
+	private AmqpConnectionDetails connectionDetails;
+
+	@Autowired
+	private AmqpClient amqpClient;
+
+	@Test
+	void connectionCanBeMadeToActiveMqContainer() throws Exception {
+		assertThat(this.connectionDetails).isNotNull();
+		String address = UUID.randomUUID().toString();
+		this.amqpClient.to(address).body("test message").send();
+		Object message = this.amqpClient.from(address).receiveAndConvert().get(4, TimeUnit.MINUTES);
+		assertThat(message).isEqualTo("test message");
+	}
+
+	@Configuration(proxyBeanMethods = false)
+	@ImportAutoConfiguration(AmqpAutoConfiguration.class)
+	static class TestConfiguration {
+
+	}
+
+}

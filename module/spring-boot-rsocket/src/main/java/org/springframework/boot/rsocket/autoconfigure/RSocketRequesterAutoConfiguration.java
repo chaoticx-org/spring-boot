@@ -1,0 +1,47 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+package org.springframework.boot.rsocket.autoconfigure;
+
+import io.rsocket.transport.netty.server.TcpServerTransport;
+import reactor.netty.http.server.HttpServer;
+
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.config.ConfigurableBeanFactory;
+import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Scope;
+import org.springframework.messaging.rsocket.RSocketConnectorConfigurer;
+import org.springframework.messaging.rsocket.RSocketRequester;
+import org.springframework.messaging.rsocket.RSocketRequester.Builder;
+import org.springframework.messaging.rsocket.RSocketStrategies;
+
+/**
+ * {@link EnableAutoConfiguration Auto-configuration} for
+ * {@link org.springframework.messaging.rsocket.RSocketRequester}. This auto-configuration
+ * creates {@link org.springframework.messaging.rsocket.RSocketRequester.Builder}
+ * prototype beans, as the builders are stateful and should not be reused to build
+ * requester instances with different configurations.
+ *
+ * @author Brian Clozel
+ * @since 4.0.0
+ */
+@AutoConfiguration(after = RSocketStrategiesAutoConfiguration.class)
+@ConditionalOnClass({ RSocketRequester.class, io.rsocket.RSocket.class, HttpServer.class, TcpServerTransport.class })
+public final class RSocketRequesterAutoConfiguration {
+
+	@Bean
+	@Scope(ConfigurableBeanFactory.SCOPE_PROTOTYPE)
+	@ConditionalOnMissingBean
+	RSocketRequester.Builder rSocketRequesterBuilder(RSocketStrategies strategies,
+			ObjectProvider<RSocketConnectorConfigurer> connectorConfigurers) {
+		Builder builder = RSocketRequester.builder().rsocketStrategies(strategies);
+		connectorConfigurers.orderedStream().forEach(builder::rsocketConnector);
+		return builder;
+	}
+
+}

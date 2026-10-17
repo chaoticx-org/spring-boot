@@ -1,0 +1,72 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+package org.springframework.boot.data.r2dbc.test.autoconfigure;
+
+import java.time.Duration;
+import java.util.Map;
+
+import io.r2dbc.spi.ConnectionFactory;
+import org.junit.jupiter.api.Test;
+import reactor.core.publisher.Flux;
+import reactor.test.StepVerifier;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.testcontainers.service.connection.ServiceConnectionAutoConfiguration;
+import org.springframework.boot.transaction.autoconfigure.TransactionAutoConfiguration;
+import org.springframework.boot.transaction.autoconfigure.TransactionManagerCustomizationAutoConfiguration;
+import org.springframework.context.ApplicationContext;
+import org.springframework.r2dbc.core.DatabaseClient;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.boot.autoconfigure.AutoConfigurationImportedCondition.importedAutoConfiguration;
+
+/**
+ * Integration tests for {@link DataR2dbcTest}.
+ *
+ * @author Mark Paluch
+ */
+@DataR2dbcTest(
+		properties = "spring.sql.init.schemaLocations=classpath:org/springframework/boot/data/r2dbc/test/autoconfigure/schema.sql")
+class DataR2dbcTestIntegrationTests {
+
+	@Autowired
+	private DatabaseClient databaseClient;
+
+	@Autowired
+	private ConnectionFactory connectionFactory;
+
+	@Autowired
+	private ApplicationContext applicationContext;
+
+	@Test
+	void testDatabaseClient() {
+		Flux<Map<String, Object>> all = this.databaseClient.sql("SELECT * FROM example").fetch().all();
+		StepVerifier.create(all).expectNextCount(1).expectComplete().verify(Duration.ofSeconds(30));
+	}
+
+	@Test
+	void replacesDefinedConnectionFactoryWithEmbeddedDefault() {
+		String product = this.connectionFactory.getMetadata().getName();
+		assertThat(product).isEqualTo("H2");
+	}
+
+	@Test
+	void registersExampleRepository() {
+		assertThat(this.applicationContext.getBeanNamesForType(ExampleRepository.class)).isNotEmpty();
+	}
+
+	@Test
+	void serviceConnectionAutoConfigurationWasImported() {
+		assertThat(this.applicationContext).has(importedAutoConfiguration(ServiceConnectionAutoConfiguration.class));
+	}
+
+	@Test
+	void transactionAutoConfigurationWasImported() {
+		assertThat(this.applicationContext).has(importedAutoConfiguration(TransactionAutoConfiguration.class));
+		assertThat(this.applicationContext)
+			.has(importedAutoConfiguration(TransactionManagerCustomizationAutoConfiguration.class));
+	}
+
+}

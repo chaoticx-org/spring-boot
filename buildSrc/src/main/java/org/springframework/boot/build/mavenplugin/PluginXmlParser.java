@@ -1,17 +1,5 @@
 /*
- * Copyright 2012-2020 the original author or authors.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      https://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2012-present the original author or authors.
  */
 
 package org.springframework.boot.build.mavenplugin;
@@ -23,7 +11,6 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
-import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.xpath.XPath;
 import javax.xml.xpath.XPathConstants;
 import javax.xml.xpath.XPathExpressionException;
@@ -31,6 +18,8 @@ import javax.xml.xpath.XPathFactory;
 
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
+
+import org.springframework.boot.build.xml.XmlDocument;
 
 /**
  * A parser for a Maven plugin's {@code plugin.xml} file.
@@ -48,7 +37,7 @@ class PluginXmlParser {
 
 	Plugin parse(File pluginXml) {
 		try {
-			Node root = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(pluginXml);
+			Node root = XmlDocument.parse(pluginXml);
 			List<Mojo> mojos = parseMojos(root);
 			return new Plugin(textAt("//plugin/groupId", root), textAt("//plugin/artifactId", root),
 					textAt("//plugin/version", root), textAt("//plugin/goalPrefix", root), mojos);
@@ -99,9 +88,10 @@ class PluginXmlParser {
 
 	private Parameter parseParameter(Node parameterNode, Map<String, String> defaultValues,
 			Map<String, String> userProperties) throws XPathExpressionException {
+		String description = textAt("description", parameterNode);
 		return new Parameter(textAt("name", parameterNode), textAt("type", parameterNode),
 				booleanAt("required", parameterNode), booleanAt("editable", parameterNode),
-				format(textAt("description", parameterNode)), defaultValues.get(textAt("name", parameterNode)),
+				(description != null) ? format(description) : "", defaultValues.get(textAt("name", parameterNode)),
 				userProperties.get(textAt("name", parameterNode)), textAt("since", parameterNode));
 	}
 
@@ -110,10 +100,18 @@ class PluginXmlParser {
 	}
 
 	private String format(String input) {
-		return input.replace("<code>", "`").replace("</code>", "`").replace("&lt;", "<").replace("&gt;", ">")
-				.replace("<br>", " ").replace("\n", " ").replace("&quot;", "\"").replaceAll("\\{@code (.*?)}", "`$1`")
-				.replaceAll("\\{@link (.*?)}", "`$1`").replaceAll("\\{@literal (.*?)}", "`$1`")
-				.replaceAll("<a href=.\"(.*?)\".>(.*?)</a>", "\\$1[\\$2]");
+		return input.replace("<code>", "`")
+			.replace("</code>", "`")
+			.replace("&lt;", "<")
+			.replace("&gt;", ">")
+			.replace("<br>", " ")
+			.replace("<p>", " ")
+			.replace("\n", " ")
+			.replace("&quot;", "\"")
+			.replaceAll("\\{@code (.*?)}", "`$1`")
+			.replaceAll("\\{@link (.*?)}", "`$1`")
+			.replaceAll("\\{@literal (.*?)}", "`$1`")
+			.replaceAll("<a href=.\"(.*?)\".>(.*?)</a>", "$1[$2]");
 	}
 
 	private static final class IterableNodeList implements Iterable<Node> {
@@ -131,9 +129,9 @@ class PluginXmlParser {
 		@Override
 		public Iterator<Node> iterator() {
 
-			return new Iterator<Node>() {
+			return new Iterator<>() {
 
-				private int index = 0;
+				private int index;
 
 				@Override
 				public boolean hasNext() {

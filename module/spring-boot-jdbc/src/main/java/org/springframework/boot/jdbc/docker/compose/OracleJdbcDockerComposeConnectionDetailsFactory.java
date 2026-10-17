@@ -1,0 +1,78 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+package org.springframework.boot.jdbc.docker.compose;
+
+import org.springframework.boot.docker.compose.core.RunningService;
+import org.springframework.boot.docker.compose.service.connection.DockerComposeConnectionDetailsFactory;
+import org.springframework.boot.docker.compose.service.connection.DockerComposeConnectionSource;
+import org.springframework.boot.jdbc.autoconfigure.JdbcConnectionDetails;
+import org.springframework.util.StringUtils;
+
+/**
+ * Base class for a {@link DockerComposeConnectionDetailsFactory} to create
+ * {@link JdbcConnectionDetails} for an {@code oracle-free} or {@code oracle-xe} service.
+ *
+ * @author Moritz Halbritter
+ * @author Andy Wilkinson
+ * @author Phillip Webb
+ */
+abstract class OracleJdbcDockerComposeConnectionDetailsFactory
+		extends DockerComposeConnectionDetailsFactory<JdbcConnectionDetails> {
+
+	private final String defaultDatabase;
+
+	protected OracleJdbcDockerComposeConnectionDetailsFactory(OracleContainer container) {
+		super(container.getImageName());
+		this.defaultDatabase = container.getDefaultDatabase();
+	}
+
+	@Override
+	protected JdbcConnectionDetails getDockerComposeConnectionDetails(DockerComposeConnectionSource source) {
+		return new OracleJdbcDockerComposeConnectionDetails(source.getRunningService(), this.defaultDatabase);
+	}
+
+	/**
+	 * {@link JdbcConnectionDetails} backed by an {@code oracle-xe} or {@code oracle-free}
+	 * {@link RunningService}.
+	 */
+	static class OracleJdbcDockerComposeConnectionDetails extends DockerComposeConnectionDetails
+			implements JdbcConnectionDetails {
+
+		private static final String PARAMETERS_LABEL = "org.springframework.boot.jdbc.parameters";
+
+		private final OracleEnvironment environment;
+
+		private final String jdbcUrl;
+
+		OracleJdbcDockerComposeConnectionDetails(RunningService service, String defaultDatabase) {
+			super(service);
+			this.environment = new OracleEnvironment(service.env(), defaultDatabase);
+			this.jdbcUrl = "jdbc:oracle:thin:@" + service.host() + ":" + service.ports().get(1521) + "/"
+					+ this.environment.getDatabase() + getParameters(service);
+		}
+
+		private String getParameters(RunningService service) {
+			String parameters = service.labels().get(PARAMETERS_LABEL);
+			return (StringUtils.hasLength(parameters)) ? "?" + parameters : "";
+		}
+
+		@Override
+		public String getUsername() {
+			return this.environment.getUsername();
+		}
+
+		@Override
+		public String getPassword() {
+			return this.environment.getPassword();
+		}
+
+		@Override
+		public String getJdbcUrl() {
+			return this.jdbcUrl;
+		}
+
+	}
+
+}

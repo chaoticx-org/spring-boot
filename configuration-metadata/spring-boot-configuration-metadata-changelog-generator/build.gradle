@@ -1,0 +1,64 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+import groovy.xml.XmlSlurper
+
+
+
+plugins {
+	id "java"
+}
+
+description = "Spring Boot Configuration Metadata Changelog Generator"
+
+dependencies {
+	implementation(enforcedPlatform(project(":platform:spring-boot-dependencies")))
+	implementation(project(":configuration-metadata:spring-boot-configuration-metadata"))
+
+	testImplementation(enforcedPlatform(project(":platform:spring-boot-dependencies")))
+	testImplementation("org.assertj:assertj-core")
+	testImplementation("org.junit.jupiter:junit-jupiter")
+}
+
+nullability {
+	requireExplicitNullMarking = false
+}
+
+if (project.hasProperty("oldVersion") && project.hasProperty("newVersion")) {
+	configurations {
+		oldMetadata {
+			transitive = false
+		}
+		newMetadata {
+			transitive = false
+		}
+	}
+	configurations.oldMetadata.dependencies.addAllLater(bootArtifactsFromBom(oldVersion))
+	configurations.newMetadata.dependencies.addAllLater(bootArtifactsFromBom(newVersion))
+	def prepareOldMetadata = tasks.register("prepareOldMetadata", Sync) {
+		from(configurations.oldMetadata)
+		destinationDir = project.file("build/configuration-metadata-diff/$oldVersion")
+	}
+	def prepareNewMetadata = tasks.register("prepareNewMetadata", Sync) {
+		from(configurations.newMetadata)
+		destinationDir = project.file("build/configuration-metadata-diff/$newVersion")
+	}
+	tasks.register("generate", JavaExec) {
+		inputs.files(prepareOldMetadata, prepareNewMetadata)
+		outputs.file(project.file("build/configuration-metadata-changelog.adoc"))
+		classpath = sourceSets.main.runtimeClasspath
+		mainClass = 'org.springframework.boot.configurationmetadata.changelog.ChangelogGenerator'
+		args = [project.file("build/configuration-metadata-diff/$oldVersion"), project.file("build/configuration-metadata-diff/$newVersion"), project.file("build/configuration-metadata-changelog.adoc")]
+	}
+}
+
+def bootArtifactsFromBom(def version) {
+	project.provider {
+		def bomDependency = project.dependencies.create("org.springframework.boot:spring-boot-dependencies:$version@pom")
+		def bom = new XmlSlurper().parse(configurations.detachedConfiguration(bomDependency).singleFile)
+		return bom.dependencyManagement.dependencies.dependency
+				.findAll { it.groupId == "org.springframework.boot" }
+				.collect { project.dependencies.create("org.springframework.boot:${it.artifactId}:$version") }
+	}			
+}

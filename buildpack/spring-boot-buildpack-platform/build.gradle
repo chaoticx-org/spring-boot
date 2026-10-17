@@ -1,0 +1,35 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id "java-library"
+	id "org.springframework.boot.deployed"
+	id "org.springframework.boot.docker-test"
+}
+
+description = "Spring Boot Buildpack Platform"
+
+dependencies {
+	dockerTestImplementation(project(":test-support:spring-boot-docker-test-support"))
+	dockerTestImplementation("org.junit.jupiter:junit-jupiter")
+
+	dockerTestRuntimeOnly("org.testcontainers:testcontainers")
+
+	implementation("net.java.dev.jna:jna-platform")
+	implementation("org.apache.commons:commons-compress")
+	implementation("org.apache.httpcomponents.client5:httpclient5")
+	implementation("org.springframework:spring-core")
+	implementation("org.tomlj:tomlj")
+	implementation("tools.jackson.core:jackson-databind")
+
+	testImplementation(project(":test-support:spring-boot-test-support"))
+}
+
+tasks.named("compileTestJava") {
+	options.nullability.checking = "tests"
+}
+
+tasks.named("compileDockerTestJava") {
+	options.nullability.checking = "tests"
+}

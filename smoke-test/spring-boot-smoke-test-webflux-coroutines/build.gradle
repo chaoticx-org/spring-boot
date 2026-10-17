@@ -1,0 +1,24 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id "org.jetbrains.kotlin.jvm"
+	id "org.jetbrains.kotlin.plugin.spring"
+}
+
+description = "Spring Boot WebFlux coroutines smoke test"
+
+dependencies {
+	implementation(project(":starter:spring-boot-starter-webflux"))
+	implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
+	implementation("org.jetbrains.kotlin:kotlin-reflect")
+	implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8")
+	implementation("org.jetbrains.kotlinx:kotlinx-coroutines-reactor")
+
+	testImplementation(project(":starter:spring-boot-starter-webflux-test"))
+}
+
+nullability {
+	requireExplicitNullMarking = false
+}

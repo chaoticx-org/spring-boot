@@ -1,0 +1,25 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id 'org.springframework.boot' version '{version}'
+	id 'java'
+}
+
+apply plugin: 'com.google.protobuf'
+
+group = 'com.example'
+version = '0.0.1'
+
+repositories {
+	mavenCentral()
+}
+
+protobuf {
+	plugins {
+		grpc {
+			artifact = "io.grpc:protoc-gen-grpc-java:1.78.0"
+		}
+	}
+}

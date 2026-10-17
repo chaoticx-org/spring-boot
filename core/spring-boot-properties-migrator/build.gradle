@@ -1,0 +1,30 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id "java"
+	id "org.springframework.boot.configuration-metadata"
+	id "org.springframework.boot.deployed"
+}
+
+description = "Spring Boot Properties Migrator"
+
+dependencies {
+	implementation(project(":configuration-metadata:spring-boot-configuration-metadata"))
+	implementation(project(":core:spring-boot"))
+
+	testImplementation(project(":core:spring-boot-test"))
+	testImplementation("org.junit.jupiter:junit-jupiter")
+	testImplementation("org.assertj:assertj-core")
+	testImplementation("org.springframework:spring-test")
+}
+
+tasks.named("javadoc").configure {
+	// No public or protected classes
+	enabled = false
+}
+
+tasks.named("compileTestJava") {
+	options.nullability.checking = "tests"
+}

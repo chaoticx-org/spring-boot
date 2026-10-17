@@ -1,0 +1,66 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+package org.springframework.boot.loader.tools;
+
+import org.jspecify.annotations.Nullable;
+
+/**
+ * Encapsulates information about the artifact coordinates of a library.
+ *
+ * @author Scott Frederick
+ * @author Phillip Webb
+ * @since 2.3.0
+ */
+public interface LibraryCoordinates {
+
+	/**
+	 * Return the group ID of the coordinates.
+	 * @return the group ID
+	 */
+	@Nullable String getGroupId();
+
+	/**
+	 * Return the artifact ID of the coordinates.
+	 * @return the artifact ID
+	 */
+	@Nullable String getArtifactId();
+
+	/**
+	 * Return the version of the coordinates.
+	 * @return the version
+	 */
+	@Nullable String getVersion();
+
+	/**
+	 * Factory method to create {@link LibraryCoordinates} with the specified values.
+	 * @param groupId the group ID
+	 * @param artifactId the artifact ID
+	 * @param version the version
+	 * @return a new {@link LibraryCoordinates} instance
+	 */
+	static LibraryCoordinates of(@Nullable String groupId, @Nullable String artifactId, @Nullable String version) {
+		return new DefaultLibraryCoordinates(groupId, artifactId, version);
+	}
+
+	/**
+	 * Utility method that returns the given coordinates using the standard
+	 * {@code group:artifact:version} form.
+	 * @param coordinates the coordinates to convert (may be {@code null})
+	 * @return the standard notation form or {@code "::"} when the coordinates are null
+	 */
+	static String toStandardNotationString(@Nullable LibraryCoordinates coordinates) {
+		if (coordinates == null) {
+			return "::";
+		}
+		StringBuilder builder = new StringBuilder();
+		builder.append((coordinates.getGroupId() != null) ? coordinates.getGroupId() : "");
+		builder.append(":");
+		builder.append((coordinates.getArtifactId() != null) ? coordinates.getArtifactId() : "");
+		builder.append(":");
+		builder.append((coordinates.getVersion() != null) ? coordinates.getVersion() : "");
+		return builder.toString();
+	}
+
+}

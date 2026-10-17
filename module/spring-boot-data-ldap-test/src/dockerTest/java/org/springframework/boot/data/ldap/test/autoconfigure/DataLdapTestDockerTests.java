@@ -1,0 +1,58 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+package org.springframework.boot.data.ldap.test.autoconfigure;
+
+import java.util.List;
+
+import org.junit.jupiter.api.Test;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.boot.testcontainers.service.connection.ServiceConnectionAutoConfiguration;
+import org.springframework.boot.testsupport.container.OpenLdapContainer;
+import org.springframework.boot.testsupport.container.TestImage;
+import org.springframework.context.ApplicationContext;
+import org.springframework.ldap.core.AttributesMapper;
+import org.springframework.ldap.core.LdapTemplate;
+import org.springframework.ldap.query.LdapQueryBuilder;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.boot.autoconfigure.AutoConfigurationImportedCondition.importedAutoConfiguration;
+
+/**
+ * Sample test for {@link DataLdapTest @DataLdapTest}.
+ *
+ * @author Eddú Meléndez
+ */
+@DataLdapTest
+@Testcontainers(disabledWithoutDocker = true)
+class DataLdapTestDockerTests {
+
+	@Container
+	@ServiceConnection
+	static final OpenLdapContainer openLdap = TestImage.forContainer(OpenLdapContainer.class)
+		.withEnv("LDAP_TLS", "false");
+
+	@Autowired
+	private ApplicationContext applicationContext;
+
+	@Autowired
+	private LdapTemplate ldapTemplate;
+
+	@Test
+	void connectionCanBeMadeToLdapContainer() {
+		List<String> cn = this.ldapTemplate.search(LdapQueryBuilder.query().where("objectclass").is("dcObject"),
+				(AttributesMapper<String>) (attributes) -> attributes.get("dc").get().toString());
+		assertThat(cn).singleElement().isEqualTo("example");
+	}
+
+	@Test
+	void serviceConnectionAutoConfigurationWasImported() {
+		assertThat(this.applicationContext).has(importedAutoConfiguration(ServiceConnectionAutoConfiguration.class));
+	}
+
+}

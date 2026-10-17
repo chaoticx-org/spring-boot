@@ -1,0 +1,22 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id "java"
+}
+
+description = "Spring Boot property validation smoke test"
+
+dependencies {
+	annotationProcessor(project(":configuration-metadata:spring-boot-configuration-processor"))
+
+	implementation(project(":starter:spring-boot-starter"))
+
+	testImplementation(project(":starter:spring-boot-starter-test"))
+	testImplementation(project(":module:spring-boot-web-server"))
+}
+
+tasks.named("compileTestJava") {
+	options.nullability.checking = "tests"
+}

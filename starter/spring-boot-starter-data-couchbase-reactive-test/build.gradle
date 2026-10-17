@@ -1,0 +1,17 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id "org.springframework.boot.starter"
+}
+
+description = "Starter for testing Couchbase document-oriented database and Spring Data Couchbase Reactive"
+
+dependencies {
+	api(project(":starter:spring-boot-starter-data-couchbase-reactive"))
+	api(project(":starter:spring-boot-starter-test"))
+
+	api(project(":module:spring-boot-data-couchbase-test"))
+	api("io.projectreactor:reactor-test")
+}

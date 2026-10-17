@@ -1,0 +1,17 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id 'org.springframework.boot' version '{version}'
+	id 'war'
+}
+
+apply plugin: 'org.cyclonedx.bom'
+
+group = 'com.example'
+version = '0.0.1'
+
+tasks.named("bootWar") {
+	mainClass = 'com.example.ExampleApplication'
+}

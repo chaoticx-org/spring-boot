@@ -1,0 +1,29 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id 'war'
+	id 'maven-publish'
+	id 'org.springframework.boot' version '{version}'
+}
+
+bootWar {
+	mainClass = 'com.example.Application'
+}
+
+group = 'com.example'
+version = '1.0'
+
+publishing {
+	repositories {
+		maven {
+			url = layout.buildDirectory.dir("repo")
+		}
+	}
+	publications {
+		bootWeb(MavenPublication) {
+			artifact bootWar
+		}
+	}
+}

@@ -1,0 +1,18 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+package org.springframework.boot.web.context.reactive;
+
+import org.springframework.context.ConfigurableApplicationContext;
+
+/**
+ * Interface to provide configuration for a reactive web application.
+ *
+ * @author Stephane Nicoll
+ * @since 2.0.0
+ */
+public interface ConfigurableReactiveWebApplicationContext
+		extends ConfigurableApplicationContext, ReactiveWebApplicationContext {
+
+}

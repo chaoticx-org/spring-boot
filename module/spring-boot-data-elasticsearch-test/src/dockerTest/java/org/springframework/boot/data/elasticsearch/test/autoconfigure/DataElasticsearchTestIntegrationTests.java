@@ -1,0 +1,76 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+package org.springframework.boot.data.elasticsearch.test.autoconfigure;
+
+import java.util.UUID;
+
+import org.junit.jupiter.api.Test;
+import org.testcontainers.elasticsearch.ElasticsearchContainer;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
+
+import org.springframework.beans.factory.NoSuchBeanDefinitionException;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.boot.testcontainers.service.connection.ServiceConnectionAutoConfiguration;
+import org.springframework.boot.testsupport.container.TestImage;
+import org.springframework.context.ApplicationContext;
+import org.springframework.data.elasticsearch.client.elc.ElasticsearchTemplate;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
+import static org.springframework.boot.autoconfigure.AutoConfigurationImportedCondition.importedAutoConfiguration;
+
+/**
+ * Sample test for {@link DataElasticsearchTest @DataElasticsearchTest}.
+ *
+ * @author Eddú Meléndez
+ * @author Moritz Halbritter
+ * @author Andy Wilkinson
+ * @author Phillip Webb
+ */
+@DataElasticsearchTest
+@Testcontainers(disabledWithoutDocker = true)
+class DataElasticsearchTestIntegrationTests {
+
+	@Container
+	@ServiceConnection
+	static final ElasticsearchContainer elasticsearch = TestImage.ELASTICSEARCH.container();
+
+	@Autowired
+	private ElasticsearchTemplate elasticsearchTemplate;
+
+	@Autowired
+	private ExampleRepository exampleRepository;
+
+	@Autowired
+	private ApplicationContext applicationContext;
+
+	@Test
+	void didNotInjectExampleService() {
+		assertThatExceptionOfType(NoSuchBeanDefinitionException.class)
+			.isThrownBy(() -> this.applicationContext.getBean(ExampleService.class));
+	}
+
+	@Test
+	void testRepository() {
+		ExampleDocument document = new ExampleDocument();
+		document.setText("Look, new @DataElasticsearchTest!");
+		String id = UUID.randomUUID().toString();
+		document.setId(id);
+		ExampleDocument savedDocument = this.exampleRepository.save(document);
+		ExampleDocument getDocument = this.elasticsearchTemplate.get(id, ExampleDocument.class);
+		assertThat(getDocument).isNotNull();
+		assertThat(getDocument.getId()).isNotNull();
+		assertThat(getDocument.getId()).isEqualTo(savedDocument.getId());
+		this.exampleRepository.deleteAll();
+	}
+
+	@Test
+	void serviceConnectionAutoConfigurationWasImported() {
+		assertThat(this.applicationContext).has(importedAutoConfiguration(ServiceConnectionAutoConfiguration.class));
+	}
+
+}

@@ -1,0 +1,109 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+package org.springframework.boot.build.context.properties;
+
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.StandardOpenOption;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
+
+import org.gradle.api.DefaultTask;
+import org.gradle.api.Task;
+import org.gradle.api.file.FileCollection;
+import org.gradle.api.file.RegularFileProperty;
+import org.gradle.api.tasks.InputFiles;
+import org.gradle.api.tasks.OutputFile;
+import org.gradle.api.tasks.PathSensitive;
+import org.gradle.api.tasks.PathSensitivity;
+import org.gradle.api.tasks.TaskAction;
+import org.gradle.api.tasks.VerificationException;
+
+/**
+ * {@link Task} that checks aggregated Spring configuration metadata.
+ *
+ * @author Andy Wilkinson
+ */
+public abstract class CheckAggregatedSpringConfigurationMetadata extends DefaultTask {
+
+	private FileCollection configurationPropertyMetadata;
+
+	@OutputFile
+	public abstract RegularFileProperty getReportLocation();
+
+	@InputFiles
+	@PathSensitive(PathSensitivity.RELATIVE)
+	public FileCollection getConfigurationPropertyMetadata() {
+		return this.configurationPropertyMetadata;
+	}
+
+	public void setConfigurationPropertyMetadata(FileCollection configurationPropertyMetadata) {
+		this.configurationPropertyMetadata = configurationPropertyMetadata;
+	}
+
+	@TaskAction
+	void check() throws IOException {
+		Report report = createReport();
+		File reportFile = getReportLocation().get().getAsFile();
+		Files.write(reportFile.toPath(), report, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+		if (report.hasProblems()) {
+			throw new VerificationException(
+					"Problems found in aggregated Spring configuration metadata. See " + reportFile + " for details.");
+		}
+	}
+
+	private Report createReport() {
+		ConfigurationProperties configurationProperties = ConfigurationProperties
+			.fromFiles(this.configurationPropertyMetadata);
+		Set<String> propertyNames = configurationProperties.stream()
+			.map(ConfigurationProperty::getName)
+			.collect(Collectors.toSet());
+		List<ConfigurationProperty> missingReplacement = configurationProperties.stream()
+			.filter(ConfigurationProperty::isDeprecated)
+			.filter((deprecated) -> {
+				String replacement = deprecated.getDeprecation().replacement();
+				return replacement != null && !propertyNames.contains(replacement);
+			})
+			.toList();
+		return new Report(missingReplacement);
+	}
+
+	private static final class Report implements Iterable<String> {
+
+		private final List<ConfigurationProperty> propertiesWithMissingReplacement;
+
+		private Report(List<ConfigurationProperty> propertiesWithMissingReplacement) {
+			this.propertiesWithMissingReplacement = propertiesWithMissingReplacement;
+		}
+
+		private boolean hasProblems() {
+			return !this.propertiesWithMissingReplacement.isEmpty();
+		}
+
+		@Override
+		public Iterator<String> iterator() {
+			List<String> lines = new ArrayList<>();
+			if (this.propertiesWithMissingReplacement.isEmpty()) {
+				lines.add("No problems found.");
+			}
+			else {
+				lines.add("The following properties have a replacement that does not exist:");
+				lines.add("");
+				lines.addAll(this.propertiesWithMissingReplacement.stream()
+					.map((property) -> "\t" + property.getName() + " (replacement "
+							+ property.getDeprecation().replacement() + ")")
+					.toList());
+			}
+			lines.add("");
+			return lines.iterator();
+		}
+
+	}
+
+}

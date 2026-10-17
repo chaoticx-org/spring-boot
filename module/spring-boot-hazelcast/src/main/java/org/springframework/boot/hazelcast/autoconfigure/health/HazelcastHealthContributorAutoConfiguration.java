@@ -1,0 +1,46 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+package org.springframework.boot.hazelcast.autoconfigure.health;
+
+import com.hazelcast.core.HazelcastInstance;
+
+import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
+import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.hazelcast.autoconfigure.HazelcastAutoConfiguration;
+import org.springframework.boot.hazelcast.health.HazelcastHealthIndicator;
+import org.springframework.boot.health.autoconfigure.contributor.CompositeHealthContributorConfiguration;
+import org.springframework.boot.health.autoconfigure.contributor.ConditionalOnEnabledHealthIndicator;
+import org.springframework.boot.health.contributor.HealthContributor;
+import org.springframework.context.annotation.Bean;
+
+/**
+ * {@link EnableAutoConfiguration Auto-configuration} for
+ * {@link HazelcastHealthIndicator}.
+ *
+ * @author Dmytro Nosan
+ * @since 4.0.0
+ */
+@AutoConfiguration(after = HazelcastAutoConfiguration.class)
+@ConditionalOnClass({ HazelcastInstance.class, ConditionalOnEnabledHealthIndicator.class })
+@ConditionalOnBean(HazelcastInstance.class)
+@ConditionalOnEnabledHealthIndicator("hazelcast")
+public final class HazelcastHealthContributorAutoConfiguration
+		extends CompositeHealthContributorConfiguration<HazelcastHealthIndicator, HazelcastInstance> {
+
+	HazelcastHealthContributorAutoConfiguration() {
+		super(HazelcastHealthIndicator::new);
+	}
+
+	@Bean
+	@ConditionalOnMissingBean(name = { "hazelcastHealthIndicator", "hazelcastHealthContributor" })
+	HealthContributor hazelcastHealthContributor(ConfigurableListableBeanFactory beanFactory) {
+		return createContributor(beanFactory, HazelcastInstance.class);
+	}
+
+}

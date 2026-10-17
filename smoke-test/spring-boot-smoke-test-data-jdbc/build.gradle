@@ -1,0 +1,23 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id "java"
+}
+
+description = "Spring Boot Data JDBC smoke test"
+
+dependencies {
+	implementation(project(":starter:spring-boot-starter-data-jdbc"))
+	implementation(project(":starter:spring-boot-starter-webmvc"))
+
+	runtimeOnly("com.h2database:h2")
+
+	testImplementation(project(":starter:spring-boot-starter-data-jdbc-test"))
+	testImplementation(project(":starter:spring-boot-starter-webmvc-test"))
+}
+
+tasks.named("compileTestJava") {
+	options.nullability.checking = "tests"
+}

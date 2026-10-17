@@ -1,0 +1,19 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+
+pluginManagement {
+	new File(rootDir.parentFile.parentFile, "gradle.properties").withInputStream {
+		def properties = new Properties()
+		properties.load(it)
+		properties.forEach(settings.ext::set)
+		gradle.lifecycle.beforeProject {
+			properties.forEach(project.ext::set)
+		}
+	}
+}
+
+enableFeaturePreview("NO_IMPLICIT_LOOKUP_IN_PARENT_PROJECTS")
+
+include 'cycle-detection-plugin'

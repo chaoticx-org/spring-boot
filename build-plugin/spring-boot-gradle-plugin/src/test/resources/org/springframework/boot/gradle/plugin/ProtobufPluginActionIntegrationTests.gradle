@@ -1,0 +1,56 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id 'org.springframework.boot' version '{version}'
+	id 'java'
+}
+
+apply plugin: 'com.google.protobuf'
+
+group = 'com.example'
+version = '0.0.1'
+
+repositories {
+	mavenCentral()
+}
+
+dependencies {
+	implementation("com.google.protobuf:protobuf-java:4.34.0")
+	implementation("io.grpc:grpc-util:1.79.0")
+}
+
+protobuf {
+	plugins {
+		grpc {}
+	}
+}
+
+tasks.register("protocArtifact") {
+	doFirst {
+		protobuf {
+			protoc {
+				println "protoc artifact: '$artifact'"
+			}
+		}
+	}
+}
+
+tasks.register("grpcPlugin") {
+	doFirst {
+		protobuf {
+			plugins {
+				grpc {
+					println "grpc plugin artifact: '$artifact'"
+				}
+			}
+		}
+	}
+}
+
+tasks.register("generateProtoTasksGrpcPluginOptions") {
+	doFirst {
+		tasks.withType(com.google.protobuf.gradle.GenerateProtoTask).each { println "${it.name}: ${it.pluginsForCaching.collect { it.options }}" }
+	}
+}

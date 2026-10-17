@@ -1,0 +1,13 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id "org.springframework.boot.starter"
+}
+
+description = "Starter for using Spring REST Docs"
+
+dependencies {
+	api(project(":module:spring-boot-restdocs"))
+}

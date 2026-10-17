@@ -1,0 +1,141 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+package org.springframework.boot.jersey.autoconfigure.metrics;
+
+import java.net.URI;
+import java.time.Duration;
+
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
+import io.micrometer.core.instrument.observation.DefaultMeterObservationHandler;
+import io.micrometer.core.instrument.observation.MeterObservationHandler;
+import io.micrometer.observation.Observation.Context;
+import jakarta.ws.rs.GET;
+import jakarta.ws.rs.Path;
+import jakarta.ws.rs.PathParam;
+import org.assertj.core.api.InstanceOfAssertFactories;
+import org.awaitility.Awaitility;
+import org.glassfish.jersey.micrometer.server.ObservationApplicationEventListener;
+import org.glassfish.jersey.server.ResourceConfig;
+import org.junit.jupiter.api.Test;
+
+import org.springframework.boot.autoconfigure.AutoConfigurations;
+import org.springframework.boot.jersey.autoconfigure.JerseyAutoConfiguration;
+import org.springframework.boot.jersey.autoconfigure.ResourceConfigCustomizer;
+import org.springframework.boot.micrometer.metrics.autoconfigure.MetricsAutoConfiguration;
+import org.springframework.boot.micrometer.metrics.autoconfigure.export.simple.SimpleMetricsExportAutoConfiguration;
+import org.springframework.boot.micrometer.observation.autoconfigure.ObservationAutoConfiguration;
+import org.springframework.boot.test.context.FilteredClassLoader;
+import org.springframework.boot.test.context.assertj.AssertableWebApplicationContext;
+import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.boot.test.context.runner.WebApplicationContextRunner;
+import org.springframework.boot.tomcat.autoconfigure.servlet.TomcatServletWebServerAutoConfiguration;
+import org.springframework.boot.web.server.WebServer;
+import org.springframework.boot.web.server.servlet.context.AnnotationConfigServletWebServerApplicationContext;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.web.client.RestClient;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/**
+ * Tests for {@link JerseyServerMetricsAutoConfiguration}.
+ *
+ * @author Michael Weirauch
+ * @author Michael Simons
+ * @author Moritz Halbritter
+ */
+class JerseyServerMetricsAutoConfigurationTests {
+
+	private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
+		.withConfiguration(AutoConfigurations.of(JerseyServerMetricsAutoConfiguration.class));
+
+	private final WebApplicationContextRunner webContextRunner = new WebApplicationContextRunner(
+			AnnotationConfigServletWebServerApplicationContext::new)
+		.withConfiguration(AutoConfigurations.of(JerseyAutoConfiguration.class,
+				JerseyServerMetricsAutoConfiguration.class, TomcatServletWebServerAutoConfiguration.class,
+				TomcatServletWebServerAutoConfiguration.class, SimpleMetricsExportAutoConfiguration.class,
+				ObservationAutoConfiguration.class, MetricsAutoConfiguration.class))
+		.withUserConfiguration(ResourceConfiguration.class)
+		.withPropertyValues("server.port:0");
+
+	@Test
+	void shouldOnlyBeActiveInWebApplicationContext() {
+		this.contextRunner.run((context) -> assertThat(context).doesNotHaveBean(ResourceConfigCustomizer.class));
+	}
+
+	@Test
+	void shouldProvideAllNecessaryBeans() {
+		this.webContextRunner.run((context) -> assertThat(context).hasBean("jerseyMetricsUriTagFilter")
+			.hasSingleBean(ResourceConfigCustomizer.class));
+	}
+
+	@Test
+	void httpRequestsAreTimed() {
+		this.webContextRunner.withUserConfiguration(MetricsConfiguration.class).run((context) -> {
+			doRequest(context);
+			MeterRegistry registry = context.getBean(MeterRegistry.class);
+			// Response is sent before the timer is registered which triggers a race
+			// condition.
+			// https://github.com/apache/tomcat/commit/69eff83577f7c00cbaaca9384ab4b1989f516797
+			Awaitility.await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
+				Timer timer = registry.find("http.server.requests").tag("uri", "/users/{id}").timer();
+				assertThat(timer).isNotNull().extracting(Timer::count, InstanceOfAssertFactories.LONG).isOne();
+			});
+		});
+	}
+
+	@Test
+	void noHttpRequestsTimedWhenJerseyInstrumentationMissingFromClasspath() {
+		this.webContextRunner.withClassLoader(new FilteredClassLoader(ObservationApplicationEventListener.class))
+			.run((context) -> {
+				doRequest(context);
+				MeterRegistry registry = context.getBean(MeterRegistry.class);
+				assertThat(registry.find("http.server.requests").timer()).isNull();
+			});
+	}
+
+	private static void doRequest(AssertableWebApplicationContext context) {
+		WebServer webServer = context
+			.getSourceApplicationContext(AnnotationConfigServletWebServerApplicationContext.class)
+			.getWebServer();
+		assertThat(webServer).isNotNull();
+		int port = webServer.getPort();
+		RestClient restClient = RestClient.create();
+		restClient.get().uri(URI.create("http://localhost:" + port + "/users/3")).retrieve().toEntity(String.class);
+	}
+
+	@Configuration(proxyBeanMethods = false)
+	static class ResourceConfiguration {
+
+		@Bean
+		ResourceConfig resourceConfig() {
+			return new ResourceConfig().register(new TestResource());
+		}
+
+		@Path("/users")
+		public static class TestResource {
+
+			@GET
+			@Path("/{id}")
+			public String getUser(@PathParam("id") String id) {
+				return id;
+			}
+
+		}
+
+	}
+
+	@Configuration(proxyBeanMethods = false)
+	static class MetricsConfiguration {
+
+		@Bean
+		MeterObservationHandler<Context> meterObservationHandler(MeterRegistry registry) {
+			return DefaultMeterObservationHandler.builder(registry).build();
+		}
+
+	}
+
+}

@@ -1,0 +1,31 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id "java-library"
+	id "org.springframework.boot.deployed"
+	id "org.springframework.boot.optional-dependencies"
+}
+
+description = "Spring Boot gRPC Test"
+
+dependencies {
+	api(project(":core:spring-boot-test-autoconfigure"))
+	api(project(":module:spring-boot-grpc-client"))
+	api(project(":module:spring-boot-grpc-server"))
+
+	optional(project(":core:spring-boot-autoconfigure"))
+	optional("io.grpc:grpc-inprocess")
+	optional("io.grpc:grpc-stub")
+	optional("org.junit.jupiter:junit-jupiter-api")
+
+	testImplementation(project(":test-support:spring-boot-test-support"))
+	testImplementation("io.grpc:grpc-netty")
+
+	testRuntimeOnly("ch.qos.logback:logback-classic")
+}
+
+tasks.named("compileTestJava") {
+	options.nullability.checking = "tests"
+}

@@ -1,0 +1,143 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+package org.springframework.boot.env;
+
+import java.util.Collections;
+import java.util.function.Consumer;
+
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+import org.springframework.core.env.CompositePropertySource;
+import org.springframework.core.env.MutablePropertySources;
+import org.springframework.core.env.PropertySource;
+import org.springframework.mock.env.MockEnvironment;
+import org.springframework.mock.env.MockPropertySource;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.assertArg;
+import static org.mockito.BDDMockito.then;
+
+/**
+ * Tests for {@link DefaultPropertiesPropertySource}.
+ *
+ * @author Phillip Webb
+ * @author Madhura Bhave
+ */
+@ExtendWith(MockitoExtension.class)
+class DefaultPropertiesPropertySourceTests {
+
+	@Mock
+	private Consumer<DefaultPropertiesPropertySource> action;
+
+	@Test
+	void nameIsDefaultProperties() {
+		assertThat(DefaultPropertiesPropertySource.NAME).isEqualTo("defaultProperties");
+	}
+
+	@Test
+	void createCreatesSource() {
+		DefaultPropertiesPropertySource propertySource = new DefaultPropertiesPropertySource(
+				Collections.singletonMap("spring", "boot"));
+		assertThat(propertySource.getName()).isEqualTo("defaultProperties");
+		assertThat(propertySource.getProperty("spring")).isEqualTo("boot");
+	}
+
+	@Test
+	void hasMatchingNameWhenNameMatchesReturnsTrue() {
+		MockPropertySource propertySource = new MockPropertySource("defaultProperties");
+		assertThat(DefaultPropertiesPropertySource.hasMatchingName(propertySource)).isTrue();
+	}
+
+	@Test
+	void hasMatchingNameWhenNameDoesNotMatchReturnsFalse() {
+		MockPropertySource propertySource = new MockPropertySource("normalProperties");
+		assertThat(DefaultPropertiesPropertySource.hasMatchingName(propertySource)).isFalse();
+	}
+
+	@Test
+	void hasMatchingNameWhenPropertySourceIsNullReturnsFalse() {
+		assertThat(DefaultPropertiesPropertySource.hasMatchingName(null)).isFalse();
+	}
+
+	@Test
+	void ifNotEmptyWhenNullDoesNotCallAction() {
+		DefaultPropertiesPropertySource.ifNotEmpty(null, this.action);
+		then(this.action).shouldHaveNoInteractions();
+	}
+
+	@Test
+	void ifNotEmptyWhenEmptyDoesNotCallAction() {
+		DefaultPropertiesPropertySource.ifNotEmpty(Collections.emptyMap(), this.action);
+		then(this.action).shouldHaveNoInteractions();
+	}
+
+	@Test
+	void ifNotEmptyHasValueCallsAction() {
+		DefaultPropertiesPropertySource.ifNotEmpty(Collections.singletonMap("spring", "boot"), this.action);
+		then(this.action).should()
+			.accept(assertArg((properties) -> assertThat(properties.getProperty("spring")).isEqualTo("boot")));
+	}
+
+	@Test
+	void moveToEndWhenNotPresentDoesNothing() {
+		MockEnvironment environment = new MockEnvironment();
+		DefaultPropertiesPropertySource.moveToEnd(environment);
+	}
+
+	@Test
+	void addOrMergeWhenExistingNotFoundShouldAdd() {
+		MockEnvironment environment = new MockEnvironment();
+		MutablePropertySources propertySources = environment.getPropertySources();
+		DefaultPropertiesPropertySource.addOrMerge(Collections.singletonMap("spring", "boot"), propertySources);
+		assertThat(propertySources.contains(DefaultPropertiesPropertySource.NAME)).isTrue();
+		assertThat(getDefaultPropertySource(propertySources).getProperty("spring")).isEqualTo("boot");
+	}
+
+	@Test
+	void addOrMergeWhenExistingFoundShouldMerge() {
+		MockEnvironment environment = new MockEnvironment();
+		MutablePropertySources propertySources = environment.getPropertySources();
+		propertySources.addLast(new DefaultPropertiesPropertySource(Collections.singletonMap("spring", "boot")));
+		DefaultPropertiesPropertySource.addOrMerge(Collections.singletonMap("hello", "world"), propertySources);
+		assertThat(propertySources.contains(DefaultPropertiesPropertySource.NAME)).isTrue();
+		assertThat(getDefaultPropertySource(propertySources).getProperty("spring")).isEqualTo("boot");
+		assertThat(getDefaultPropertySource(propertySources).getProperty("hello")).isEqualTo("world");
+	}
+
+	@Test
+	void addOrMergeWhenExistingNotMapPropertySourceShouldNotMerge() {
+		MockEnvironment environment = new MockEnvironment();
+		MutablePropertySources propertySources = environment.getPropertySources();
+		CompositePropertySource composite = new CompositePropertySource(DefaultPropertiesPropertySource.NAME);
+		composite.addPropertySource(new DefaultPropertiesPropertySource(Collections.singletonMap("spring", "boot")));
+		propertySources.addFirst(composite);
+		DefaultPropertiesPropertySource.addOrMerge(Collections.singletonMap("hello", "world"), propertySources);
+		assertThat(propertySources.contains(DefaultPropertiesPropertySource.NAME)).isTrue();
+		assertThat(getDefaultPropertySource(propertySources).getProperty("spring")).isNull();
+		assertThat(getDefaultPropertySource(propertySources).getProperty("hello")).isEqualTo("world");
+	}
+
+	@Test
+	void moveToEndWhenPresentMovesToEnd() {
+		MockEnvironment environment = new MockEnvironment();
+		MutablePropertySources propertySources = environment.getPropertySources();
+		propertySources.addLast(new DefaultPropertiesPropertySource(Collections.singletonMap("spring", "boot")));
+		propertySources.addLast(new MockPropertySource("test"));
+		DefaultPropertiesPropertySource.moveToEnd(environment);
+		String[] names = propertySources.stream().map(PropertySource::getName).toArray(String[]::new);
+		assertThat(names).containsExactly(MockPropertySource.MOCK_PROPERTIES_PROPERTY_SOURCE_NAME, "test",
+				DefaultPropertiesPropertySource.NAME);
+	}
+
+	private PropertySource<?> getDefaultPropertySource(MutablePropertySources propertySources) {
+		PropertySource<?> propertySource = propertySources.get(DefaultPropertiesPropertySource.NAME);
+		assertThat(propertySource).isNotNull();
+		return propertySource;
+	}
+
+}

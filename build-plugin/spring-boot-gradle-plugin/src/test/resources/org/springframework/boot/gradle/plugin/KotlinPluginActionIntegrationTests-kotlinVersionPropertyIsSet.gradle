@@ -1,0 +1,38 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id 'org.springframework.boot' version '{version}'
+}
+
+apply plugin: 'io.spring.dependency-management'
+apply plugin: 'org.jetbrains.kotlin.jvm'
+
+dependencyManagement {
+	resolutionStrategy {
+		eachDependency {
+			if (it.requested.group == 'org.springframework.boot') {
+				it.useVersion project.bootVersion
+			}
+		}
+	}
+}
+
+repositories {
+	mavenCentral()
+	maven {
+		url = 'repository'
+	}
+}
+
+dependencies {
+	implementation('org.jetbrains.kotlin:kotlin-stdlib-jdk8')
+}
+
+tasks.register("kotlinVersion") {
+	def kotlinVersion = project.findProperty('kotlin.version') ?: 'none'
+	doLast {
+		println "Kotlin version: ${kotlinVersion}"
+	}
+}

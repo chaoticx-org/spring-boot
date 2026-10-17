@@ -1,0 +1,61 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+package org.springframework.boot.elasticsearch.testcontainers;
+
+import java.io.IOException;
+import java.time.Duration;
+
+import co.elastic.clients.elasticsearch.ElasticsearchClient;
+import org.junit.jupiter.api.Test;
+import org.testcontainers.elasticsearch.ElasticsearchContainer;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.ImportAutoConfiguration;
+import org.springframework.boot.elasticsearch.autoconfigure.ElasticsearchClientAutoConfiguration;
+import org.springframework.boot.elasticsearch.autoconfigure.ElasticsearchConnectionDetails;
+import org.springframework.boot.elasticsearch.autoconfigure.ElasticsearchRestClientAutoConfiguration;
+import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.boot.testsupport.container.TestImage;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.test.context.junit.jupiter.SpringJUnitConfig;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/**
+ * Tests for {@link ElasticsearchContainerConnectionDetailsFactory}.
+ *
+ * @author Andy Wilkinson
+ */
+@SpringJUnitConfig
+@Testcontainers(disabledWithoutDocker = true)
+class ElasticsearchContainerConnectionDetailsFactoryTests {
+
+	@Container
+	@ServiceConnection
+	static final ElasticsearchContainer elasticsearch = TestImage.ELASTICSEARCH_9
+		.container((setup) -> setup.withStartupAttempts(5).withStartupTimeout(Duration.ofMinutes(10)));
+
+	@Autowired(required = false)
+	private ElasticsearchConnectionDetails connectionDetails;
+
+	@Autowired
+	private ElasticsearchClient client;
+
+	@Test
+	void connectionCanBeMadeToElasticsearchContainer() throws IOException {
+		assertThat(this.connectionDetails).isNotNull();
+		assertThat(this.client.cluster().health().numberOfNodes()).isEqualTo(1);
+	}
+
+	@Configuration(proxyBeanMethods = false)
+	@ImportAutoConfiguration({ ElasticsearchClientAutoConfiguration.class,
+			ElasticsearchRestClientAutoConfiguration.class })
+	static class TestConfiguration {
+
+	}
+
+}

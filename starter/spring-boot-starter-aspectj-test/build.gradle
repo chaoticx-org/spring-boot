@@ -1,0 +1,14 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id "org.springframework.boot.starter"
+}
+
+description = "Starter for testing aspect-oriented programming with AspectJ"
+
+dependencies {
+	api(project(":starter:spring-boot-starter-aspectj"))
+	api(project(":starter:spring-boot-starter-test"))
+}

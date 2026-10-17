@@ -1,0 +1,69 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+package org.springframework.boot.gradle.tasks.bundling;
+
+import java.io.File;
+
+import org.gradle.testkit.runner.BuildResult;
+import org.gradle.testkit.runner.BuildTask;
+import org.gradle.testkit.runner.TaskOutcome;
+import org.junit.jupiter.api.TestTemplate;
+
+import org.springframework.boot.gradle.junit.GradleCompatibility;
+import org.springframework.boot.testsupport.gradle.testkit.GradleBuild;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/**
+ * Integration tests for publishing Boot jars and wars using Gradle's Maven Publish
+ * plugin.
+ *
+ * @author Andy Wilkinson
+ */
+@GradleCompatibility
+class MavenPublishingIntegrationTests {
+
+	@SuppressWarnings("NullAway.Init")
+	GradleBuild gradleBuild;
+
+	@TestTemplate
+	void bootJarCanBePublished() {
+		BuildResult result = this.gradleBuild.build("publish");
+		BuildTask task = result.task(":publish");
+		assertThat(task).isNotNull();
+		assertThat(task.getOutcome()).isEqualTo(TaskOutcome.SUCCESS);
+		assertThat(artifactWithSuffix("jar")).isFile();
+		assertThat(artifactWithSuffix("pom")).is(pomWith().groupId("com.example")
+			.artifactId(this.gradleBuild.getProjectDir().getName())
+			.version("1.0")
+			.noPackaging()
+			.noDependencies());
+	}
+
+	@TestTemplate
+	void bootWarCanBePublished() {
+		BuildResult result = this.gradleBuild.build("publish");
+		BuildTask task = result.task(":publish");
+		assertThat(task).isNotNull();
+		assertThat(task.getOutcome()).isEqualTo(TaskOutcome.SUCCESS);
+		assertThat(artifactWithSuffix("war")).isFile();
+		assertThat(artifactWithSuffix("pom")).is(pomWith().groupId("com.example")
+			.artifactId(this.gradleBuild.getProjectDir().getName())
+			.version("1.0")
+			.packaging("war")
+			.noDependencies());
+	}
+
+	private File artifactWithSuffix(String suffix) {
+		String name = this.gradleBuild.getProjectDir().getName();
+		return new File(new File(this.gradleBuild.getProjectDir(), "build/repo"),
+				String.format("com/example/%s/1.0/%s-1.0.%s", name, name, suffix));
+	}
+
+	private PomCondition pomWith() {
+		return new PomCondition();
+	}
+
+}

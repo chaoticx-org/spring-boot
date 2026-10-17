@@ -1,0 +1,57 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+import org.springframework.boot.gradle.tasks.bundling.BootJar
+
+plugins {
+	id "java"
+	id "org.springframework.boot"
+}
+
+java {
+	sourceCompatibility = '17'
+	targetCompatibility = '17'
+}
+
+repositories {
+	maven { url = layout.projectDirectory.dir("../int-test-maven-repository") }
+	mavenCentral()
+	spring.mavenRepositories()
+}
+
+configurations {
+	app {
+		extendsFrom(configurations.runtimeClasspath)
+	}
+	tomcat {
+		extendsFrom(app)
+	}
+}
+
+dependencies {
+	compileOnly("jakarta.servlet:jakarta.servlet-api:6.0.0")
+	compileOnly("org.springframework.boot:spring-boot-starter-tomcat")
+
+	implementation(platform(org.springframework.boot.gradle.plugin.SpringBootPlugin.BOM_COORDINATES))
+	implementation("org.springframework.boot:spring-boot-starter-webmvc") {
+		exclude group: 'org.springframework.boot', module: 'spring-boot-starter-tomcat'
+	}
+	implementation("org.springframework.boot:spring-boot-starter-actuator")
+
+	app(files(sourceSets.main.output))
+	app('org.springframework.boot:spring-boot-starter-webmvc') {
+		exclude group: 'org.springframework.boot', module: 'spring-boot-starter-tomcat'
+	}
+	tomcat("org.springframework.boot:spring-boot-starter-tomcat")
+}
+
+["tomcat"].each { webServer ->
+	def configurer = { task ->
+		task.mainClass = "org.springframework.boot.sni.server.SniServerApplication"
+		task.classpath = configurations.getByName(webServer)
+		task.archiveClassifier = webServer
+		task.targetJavaVersion = project.java.targetCompatibility
+	}
+	tasks.register("${webServer}ServerApp", BootJar, configurer)
+}

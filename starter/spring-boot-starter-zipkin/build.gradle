@@ -1,0 +1,18 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id "org.springframework.boot.starter"
+}
+
+description = "Starter for using Zipkin"
+
+dependencies {
+	api(project(":starter:spring-boot-starter"))
+
+	api(project(":module:spring-boot-micrometer-tracing-brave"))
+	api(project(":module:spring-boot-zipkin"))
+
+	runtimeOnly("io.micrometer:micrometer-tracing-bridge-brave")
+}

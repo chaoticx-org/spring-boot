@@ -1,0 +1,119 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+package org.springframework.boot.micrometer.tracing.opentelemetry.autoconfigure;
+
+import java.util.List;
+
+import io.micrometer.tracing.otel.bridge.BaggageTaggingSpanProcessor;
+import io.micrometer.tracing.otel.bridge.OtelBaggageManager;
+import io.micrometer.tracing.otel.bridge.OtelCurrentTraceContext;
+import io.micrometer.tracing.otel.bridge.Slf4JBaggageEventListener;
+import io.micrometer.tracing.otel.propagation.BaggageTextMapPropagator;
+import io.opentelemetry.context.propagation.TextMapPropagator;
+
+import org.springframework.boot.autoconfigure.condition.ConditionMessage;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBooleanProperty;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.condition.OnPropertyListCondition;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.micrometer.tracing.autoconfigure.ConditionalOnEnabledTracingExport;
+import org.springframework.boot.micrometer.tracing.autoconfigure.TracingProperties;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Conditional;
+import org.springframework.context.annotation.Configuration;
+
+/**
+ * OpenTelemetry propagation configurations. They are imported by
+ * {@link OpenTelemetryTracingAutoConfiguration}.
+ *
+ * @author Moritz Halbritter
+ * @author Oleksandr Shevchenko
+ */
+class OpenTelemetryPropagationConfigurations {
+
+	/**
+	 * Propagates traces but no baggage.
+	 */
+	@Configuration(proxyBeanMethods = false)
+	@ConditionalOnBooleanProperty(name = "management.tracing.baggage.enabled", havingValue = false)
+	@EnableConfigurationProperties(TracingProperties.class)
+	static class PropagationWithoutBaggage {
+
+		@Bean
+		@ConditionalOnEnabledTracingExport
+		TextMapPropagator textMapPropagator(TracingProperties properties) {
+			return CompositeTextMapPropagator.create(properties.getPropagation(), null);
+		}
+
+	}
+
+	/**
+	 * Propagates traces and baggage.
+	 */
+	@Configuration(proxyBeanMethods = false)
+	@ConditionalOnBooleanProperty(name = "management.tracing.baggage.enabled", matchIfMissing = true)
+	@EnableConfigurationProperties(TracingProperties.class)
+	static class PropagationWithBaggage {
+
+		private final TracingProperties tracingProperties;
+
+		PropagationWithBaggage(TracingProperties tracingProperties) {
+			this.tracingProperties = tracingProperties;
+		}
+
+		@Bean
+		@ConditionalOnEnabledTracingExport
+		TextMapPropagator textMapPropagatorWithBaggage(OtelCurrentTraceContext otelCurrentTraceContext) {
+			List<String> remoteFields = this.tracingProperties.getBaggage().getRemoteFields();
+			List<String> tagFields = this.tracingProperties.getBaggage().getTagFields();
+			BaggageTextMapPropagator baggagePropagator = new BaggageTextMapPropagator(remoteFields,
+					new OtelBaggageManager(otelCurrentTraceContext, remoteFields, tagFields));
+			return CompositeTextMapPropagator.create(this.tracingProperties.getPropagation(), baggagePropagator);
+		}
+
+		@Bean
+		@ConditionalOnMissingBean
+		@ConditionalOnBooleanProperty(name = "management.tracing.baggage.correlation.enabled", matchIfMissing = true)
+		Slf4JBaggageEventListener otelSlf4JBaggageEventListener() {
+			return new Slf4JBaggageEventListener(this.tracingProperties.getBaggage().getCorrelation().getFields());
+		}
+
+		@Bean
+		@ConditionalOnMissingBean
+		@Conditional(OnBaggageTagFieldsCondition.class)
+		BaggageTaggingSpanProcessor otelBaggageTaggingSpanProcessor() {
+			return new BaggageTaggingSpanProcessor(this.tracingProperties.getBaggage().getTagFields());
+		}
+
+		/**
+		 * Condition that matches when {@code management.tracing.baggage.tag-fields} has
+		 * at least one entry.
+		 */
+		static class OnBaggageTagFieldsCondition extends OnPropertyListCondition {
+
+			OnBaggageTagFieldsCondition() {
+				super("management.tracing.baggage.tag-fields",
+						() -> ConditionMessage.forCondition("Baggage tag fields"));
+			}
+
+		}
+
+	}
+
+	/**
+	 * Propagates neither traces nor baggage.
+	 */
+	@Configuration(proxyBeanMethods = false)
+	static class NoPropagation {
+
+		@Bean
+		@ConditionalOnMissingBean
+		TextMapPropagator noopTextMapPropagator() {
+			return TextMapPropagator.noop();
+		}
+
+	}
+
+}

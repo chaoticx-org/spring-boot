@@ -1,0 +1,52 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id "java-library"
+	id "org.springframework.boot.auto-configuration"
+	id "org.springframework.boot.configuration-properties"
+	id "org.springframework.boot.deployed"
+	id "org.springframework.boot.optional-dependencies"
+}
+
+description = "Spring Boot GraphQL"
+
+dependencies {
+	api(project(":core:spring-boot"))
+	api("org.springframework.graphql:spring-graphql")
+
+	optional(project(":core:spring-boot-autoconfigure"))
+	optional(project(":module:spring-boot-http-converter"))
+	optional(project(":module:spring-boot-jackson"))
+	optional(project(":module:spring-boot-jackson2"))
+	optional(project(":module:spring-boot-micrometer-observation"))
+	optional(project(":module:spring-boot-rsocket"))
+	optional(project(":module:spring-boot-security"))
+	optional(project(":module:spring-boot-webflux"))
+	optional(project(":module:spring-boot-webmvc"))
+	optional("com.querydsl:querydsl-core")
+	optional("io.projectreactor.netty:reactor-netty-http")
+	optional("io.rsocket:rsocket-transport-netty")
+	optional("jakarta.servlet:jakarta.servlet-api")
+	optional("jakarta.websocket:jakarta.websocket-api")
+	optional("jakarta.websocket:jakarta.websocket-client-api")
+	optional("org.springframework:spring-websocket")
+	optional("org.springframework.data:spring-data-commons")
+
+	testImplementation(project(":core:spring-boot-test"))
+	testImplementation(project(":module:spring-boot-http-codec"))
+	testImplementation(project(":module:spring-boot-reactor-netty"))
+	testImplementation(project(":test-support:spring-boot-test-support"))
+	testImplementation("io.micrometer:micrometer-observation-test")
+	testImplementation("org.springframework.graphql:spring-graphql-test")
+	testImplementation("org.springframework.security:spring-security-test")
+
+	testCompileOnly("com.google.code.findbugs:jsr305")
+
+	testRuntimeOnly("ch.qos.logback:logback-classic")
+}
+
+tasks.named("compileTestJava") {
+	options.nullability.checking = "tests"
+}

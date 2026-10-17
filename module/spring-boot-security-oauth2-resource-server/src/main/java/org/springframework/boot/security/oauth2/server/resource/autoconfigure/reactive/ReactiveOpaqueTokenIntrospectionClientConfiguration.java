@@ -1,0 +1,50 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+package org.springframework.boot.security.oauth2.server.resource.autoconfigure.reactive;
+
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.security.oauth2.server.resource.autoconfigure.OAuth2ResourceServerProperties;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.oauth2.server.resource.introspection.ReactiveOpaqueTokenIntrospector;
+import org.springframework.security.oauth2.server.resource.introspection.SpringReactiveOpaqueTokenIntrospector;
+import org.springframework.util.Assert;
+import org.springframework.web.reactive.function.client.WebClient;
+
+/**
+ * Configures an {@link ReactiveOpaqueTokenIntrospector} when a token introspection
+ * endpoint is available.
+ *
+ * @author Madhura Bhave
+ */
+@Configuration(proxyBeanMethods = false)
+@ConditionalOnMissingBean(ReactiveOpaqueTokenIntrospector.class)
+@ConditionalOnClass(WebClient.class)
+class ReactiveOpaqueTokenIntrospectionClientConfiguration {
+
+	@Bean
+	@ConditionalOnProperty(name = "spring.security.oauth2.resourceserver.opaquetoken.introspection-uri")
+	SpringReactiveOpaqueTokenIntrospector reactiveOpaqueTokenIntrospector(OAuth2ResourceServerProperties properties,
+			ObjectProvider<SpringReactiveOpaqueTokenIntrospectorBuilderCustomizer> customizers) {
+		OAuth2ResourceServerProperties.Opaquetoken token = properties.getOpaquetoken();
+		String introspectionUri = token.getIntrospectionUri();
+		Assert.state(introspectionUri != null,
+				"No 'spring.security.oauth2.resourceserver.opaquetoken.introspection-uri' property specified");
+		Assert.state(token.getClientId() != null,
+				"No 'spring.security.oauth2.resourceserver.opaquetoken.client-id' property specified");
+		Assert.state(token.getClientSecret() != null,
+				"No 'spring.security.oauth2.resourceserver.opaquetoken.client-secret' property specified");
+		SpringReactiveOpaqueTokenIntrospector.Builder builder = SpringReactiveOpaqueTokenIntrospector
+			.withIntrospectionUri(introspectionUri)
+			.clientId(token.getClientId())
+			.clientSecret(token.getClientSecret());
+		customizers.orderedStream().forEach((customizer) -> customizer.customize(builder));
+		return builder.build();
+	}
+
+}

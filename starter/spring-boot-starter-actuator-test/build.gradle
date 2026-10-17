@@ -1,0 +1,15 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id "org.springframework.boot.starter"
+}
+
+description = "Starter for testing Spring Boot's Actuator which provides production ready features to help you monitor and manage your application"
+
+dependencies {
+	api(project(":starter:spring-boot-starter-actuator"))
+	api(project(":starter:spring-boot-starter-test"))
+	api(project(":starter:spring-boot-starter-micrometer-metrics-test"))
+}

@@ -1,17 +1,5 @@
 /*
- * Copyright 2012-2021 the original author or authors.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      https://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2012-present the original author or authors.
  */
 
 package org.springframework.boot.build.starters;
@@ -33,6 +21,7 @@ import java.util.stream.Stream;
 import org.gradle.api.DefaultTask;
 import org.gradle.api.Task;
 import org.gradle.api.artifacts.Configuration;
+import org.gradle.api.file.DirectoryProperty;
 import org.gradle.api.file.FileCollection;
 import org.gradle.api.tasks.InputFiles;
 import org.gradle.api.tasks.OutputDirectory;
@@ -47,11 +36,9 @@ import org.springframework.util.StringUtils;
  *
  * @author Andy Wilkinson
  */
-public class DocumentStarters extends DefaultTask {
+public abstract class DocumentStarters extends DefaultTask {
 
 	private final Configuration starters;
-
-	private File outputDir;
 
 	public DocumentStarters() {
 		this.starters = getProject().getConfigurations().create("starters");
@@ -68,13 +55,7 @@ public class DocumentStarters extends DefaultTask {
 	}
 
 	@OutputDirectory
-	public File getOutputDir() {
-		return this.outputDir;
-	}
-
-	public void setOutputDir(File outputDir) {
-		this.outputDir = outputDir;
-	}
+	public abstract DirectoryProperty getOutputDir();
 
 	@InputFiles
 	@PathSensitive(PathSensitivity.RELATIVE)
@@ -84,8 +65,10 @@ public class DocumentStarters extends DefaultTask {
 
 	@TaskAction
 	void documentStarters() {
-		Set<Starter> starters = this.starters.getFiles().stream().map(this::loadStarter)
-				.collect(Collectors.toCollection(TreeSet::new));
+		Set<Starter> starters = this.starters.getFiles()
+			.stream()
+			.map(this::loadStarter)
+			.collect(Collectors.toCollection(TreeSet::new));
 		writeTable("application-starters", starters.stream().filter(Starter::isApplication));
 		writeTable("production-starters", starters.stream().filter(Starter::isProduction));
 		writeTable("technical-starters", starters.stream().filter(Starter::isTechnical));
@@ -104,7 +87,7 @@ public class DocumentStarters extends DefaultTask {
 	}
 
 	private void writeTable(String name, Stream<Starter> starters) {
-		File output = new File(this.outputDir, name + ".adoc");
+		File output = new File(getOutputDir().getAsFile().get(), name + ".adoc");
 		output.getParentFile().mkdirs();
 		try (PrintWriter writer = new PrintWriter(new FileWriter(output))) {
 			writer.println("|===");
@@ -126,7 +109,7 @@ public class DocumentStarters extends DefaultTask {
 	}
 
 	private String addStarterCrossLinks(String input) {
-		return input.replaceAll("(spring-boot-starter[A-Za-z-]*)", "<<$1,`$1`>>");
+		return input.replaceAll("(spring-boot-starter[A-Za-z0-9-]*)", "xref:#$1[`$1`]");
 	}
 
 	private static final class Starter implements Comparable<Starter> {

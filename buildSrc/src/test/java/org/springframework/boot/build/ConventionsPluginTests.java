@@ -1,17 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      https://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2012-present the original author or authors.
  */
 
 package org.springframework.boot.build;
@@ -21,6 +9,8 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Collections;
 import java.util.Map;
 import java.util.jar.Attributes;
@@ -54,11 +44,15 @@ class ConventionsPluginTests {
 		this.buildFile = new File(this.projectDir, "build.gradle");
 		File settingsFile = new File(this.projectDir, "settings.gradle");
 		try (PrintWriter out = new PrintWriter(new FileWriter(settingsFile))) {
-			out.println("include ':spring-boot-project:spring-boot-parent'");
+			out.println("plugins {");
+			out.println("    id 'com.gradle.develocity'");
+			out.println("}");
+			out.println("include ':platform:spring-boot-internal-dependencies'");
 		}
-		File springBootParent = new File(this.projectDir, "spring-boot-project/spring-boot-parent/build.gradle");
-		springBootParent.getParentFile().mkdirs();
-		try (PrintWriter out = new PrintWriter(new FileWriter(springBootParent))) {
+		File internalDependencies = new File(this.projectDir,
+				"platform/spring-boot-internal-dependencies/build.gradle");
+		internalDependencies.getParentFile().mkdirs();
+		try (PrintWriter out = new PrintWriter(new FileWriter(internalDependencies))) {
 			out.println("plugins {");
 			out.println("    id 'java-platform'");
 			out.println("}");
@@ -73,7 +67,9 @@ class ConventionsPluginTests {
 			out.println("    id 'org.springframework.boot.conventions'");
 			out.println("}");
 			out.println("version = '1.2.3'");
-			out.println("sourceCompatibility = '17'");
+			out.println("java {");
+			out.println("    sourceCompatibility = '17'");
+			out.println("}");
 			out.println("description 'Test project for manifest customization'");
 			out.println("jar.archiveFileName = 'test.jar'");
 		}
@@ -85,9 +81,9 @@ class ConventionsPluginTests {
 			assertThatNoticeIsPresent(jar);
 			Attributes mainAttributes = jar.getManifest().getMainAttributes();
 			assertThat(mainAttributes.getValue("Implementation-Title"))
-					.isEqualTo("Test project for manifest customization");
+				.isEqualTo("Test project for manifest customization");
 			assertThat(mainAttributes.getValue("Automatic-Module-Name"))
-					.isEqualTo(this.projectDir.getName().replace("-", "."));
+				.isEqualTo(this.projectDir.getName().replace("-", "."));
 			assertThat(mainAttributes.getValue("Implementation-Version")).isEqualTo("1.2.3");
 			assertThat(mainAttributes.getValue("Built-By")).isEqualTo("Spring");
 			assertThat(mainAttributes.getValue("Build-Jdk-Spec")).isEqualTo("17");
@@ -103,7 +99,9 @@ class ConventionsPluginTests {
 			out.println("    id 'org.springframework.boot.conventions'");
 			out.println("}");
 			out.println("version = '1.2.3'");
-			out.println("sourceCompatibility = '17'");
+			out.println("java {");
+			out.println("    sourceCompatibility = '17'");
+			out.println("}");
 			out.println("description 'Test'");
 		}
 		runGradle("assemble");
@@ -114,9 +112,9 @@ class ConventionsPluginTests {
 			assertThatNoticeIsPresent(jar);
 			Attributes mainAttributes = jar.getManifest().getMainAttributes();
 			assertThat(mainAttributes.getValue("Implementation-Title"))
-					.isEqualTo("Source for " + this.projectDir.getName());
+				.isEqualTo("Source for " + this.projectDir.getName());
 			assertThat(mainAttributes.getValue("Automatic-Module-Name"))
-					.isEqualTo(this.projectDir.getName().replace("-", "."));
+				.isEqualTo(this.projectDir.getName().replace("-", "."));
 			assertThat(mainAttributes.getValue("Implementation-Version")).isEqualTo("1.2.3");
 			assertThat(mainAttributes.getValue("Built-By")).isEqualTo("Spring");
 			assertThat(mainAttributes.getValue("Build-Jdk-Spec")).isEqualTo("17");
@@ -132,7 +130,9 @@ class ConventionsPluginTests {
 			out.println("    id 'org.springframework.boot.conventions'");
 			out.println("}");
 			out.println("version = '1.2.3'");
-			out.println("sourceCompatibility = '17'");
+			out.println("java {");
+			out.println("    sourceCompatibility = '17'");
+			out.println("}");
 			out.println("description 'Test'");
 		}
 		runGradle("assemble");
@@ -143,18 +143,21 @@ class ConventionsPluginTests {
 			assertThatNoticeIsPresent(jar);
 			Attributes mainAttributes = jar.getManifest().getMainAttributes();
 			assertThat(mainAttributes.getValue("Implementation-Title"))
-					.isEqualTo("Javadoc for " + this.projectDir.getName());
+				.isEqualTo("Javadoc for " + this.projectDir.getName());
 			assertThat(mainAttributes.getValue("Automatic-Module-Name"))
-					.isEqualTo(this.projectDir.getName().replace("-", "."));
+				.isEqualTo(this.projectDir.getName().replace("-", "."));
 			assertThat(mainAttributes.getValue("Implementation-Version")).isEqualTo("1.2.3");
 			assertThat(mainAttributes.getValue("Built-By")).isEqualTo("Spring");
 			assertThat(mainAttributes.getValue("Build-Jdk-Spec")).isEqualTo("17");
 		}
 	}
 
-	private void assertThatLicenseIsPresent(JarFile jar) {
+	private void assertThatLicenseIsPresent(JarFile jar) throws IOException {
 		JarEntry license = jar.getJarEntry("META-INF/LICENSE.txt");
 		assertThat(license).isNotNull();
+		String licenseContent = FileCopyUtils.copyToString(new InputStreamReader(jar.getInputStream(license)));
+		assertThat(licenseContent).isEqualTo(Files.readString(Path.of("src", "main", "resources", "org",
+				"springframework", "boot", "build", "legal", "LICENSE.txt")));
 	}
 
 	private void assertThatNoticeIsPresent(JarFile jar) throws IOException {
@@ -175,8 +178,7 @@ class ConventionsPluginTests {
 			out.println("description 'Test'");
 			out.println("task retryConfig {");
 			out.println("    doLast {");
-			out.println("        println \"Retry plugin applied: ${plugins.hasPlugin('org.gradle.test-retry')}\"");
-			out.println("    test.retry {");
+			out.println("        test.develocity.testRetry {");
 			out.println("            println \"maxRetries: ${maxRetries.get()}\"");
 			out.println("            println \"failOnPassedAfterRetry: ${failOnPassedAfterRetry.get()}\"");
 			out.println("        }");
@@ -184,8 +186,8 @@ class ConventionsPluginTests {
 			out.println("}");
 		}
 		assertThat(runGradle(Collections.singletonMap("CI", "true"), "retryConfig", "--stacktrace").getOutput())
-				.contains("Retry plugin applied: true").contains("maxRetries: 3")
-				.contains("failOnPassedAfterRetry: true");
+			.contains("maxRetries: 3")
+			.contains("failOnPassedAfterRetry: false");
 	}
 
 	@Test
@@ -198,8 +200,7 @@ class ConventionsPluginTests {
 			out.println("description 'Test'");
 			out.println("task retryConfig {");
 			out.println("    doLast {");
-			out.println("        println \"Retry plugin applied: ${plugins.hasPlugin('org.gradle.test-retry')}\"");
-			out.println("    test.retry {");
+			out.println("        test.develocity.testRetry {");
 			out.println("            println \"maxRetries: ${maxRetries.get()}\"");
 			out.println("            println \"failOnPassedAfterRetry: ${failOnPassedAfterRetry.get()}\"");
 			out.println("        }");
@@ -207,8 +208,8 @@ class ConventionsPluginTests {
 			out.println("}");
 		}
 		assertThat(runGradle(Collections.singletonMap("CI", "local"), "retryConfig", "--stacktrace").getOutput())
-				.contains("Retry plugin applied: true").contains("maxRetries: 0")
-				.contains("failOnPassedAfterRetry: true");
+			.contains("maxRetries: 0")
+			.contains("failOnPassedAfterRetry: false");
 	}
 
 	private BuildResult runGradle(String... args) {
@@ -216,8 +217,12 @@ class ConventionsPluginTests {
 	}
 
 	private BuildResult runGradle(Map<String, String> environment, String... args) {
-		return GradleRunner.create().withProjectDir(this.projectDir).withEnvironment(environment).withArguments(args)
-				.withPluginClasspath().build();
+		return GradleRunner.create()
+			.withProjectDir(this.projectDir)
+			.withEnvironment(environment)
+			.withArguments(args)
+			.withPluginClasspath()
+			.build();
 	}
 
 }

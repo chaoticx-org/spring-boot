@@ -1,0 +1,30 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+
+plugins {
+	id "java-library"
+}
+
+description = "Spring Boot Test Integration Tests"
+
+dependencies {
+	testImplementation(project(":core:spring-boot-autoconfigure"))
+	testImplementation(project(":core:spring-boot-test"))
+	testImplementation(project(":test-support:spring-boot-test-support"))
+	testImplementation(project(":module:spring-boot-http-codec"))
+	testImplementation(project(":module:spring-boot-restclient-test"))
+	testImplementation(project(":module:spring-boot-resttestclient"))
+	testImplementation(project(":module:spring-boot-tomcat"))
+	testImplementation(project(":module:spring-boot-webflux-test"))
+	testImplementation(project(":module:spring-boot-webmvc-test"))
+	testImplementation(project(":module:spring-boot-webtestclient"))
+	testImplementation(project(":module:spring-boot-web-server"))
+	testImplementation(project(":module:spring-boot-web-server-test"))
+	testImplementation("io.projectreactor.netty:reactor-netty-http")
+	testImplementation("org.springframework:spring-webmvc")
+	testImplementation("org.springframework:spring-webflux")
+
+	testRuntimeOnly("ch.qos.logback:logback-classic")
+}

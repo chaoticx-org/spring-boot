@@ -1,0 +1,18 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id "org.springframework.boot.starter"
+}
+
+description = "Starter for testing RSocket"
+
+dependencies {
+	api(project(":starter:spring-boot-starter-rsocket"))
+	api(project(":starter:spring-boot-starter-jackson-test"))
+	api(project(":starter:spring-boot-starter-test"))
+
+	api(project(":module:spring-boot-rsocket-test"))
+	api("io.projectreactor:reactor-test")
+}

@@ -1,0 +1,19 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id "java"
+}
+
+description = "Spring Boot Logback smoke test"
+
+dependencies {
+	implementation(project(":starter:spring-boot-starter"))
+
+	testImplementation(project(":starter:spring-boot-starter-test"))
+}
+
+tasks.named("compileTestJava") {
+	options.nullability.checking = "tests"
+}

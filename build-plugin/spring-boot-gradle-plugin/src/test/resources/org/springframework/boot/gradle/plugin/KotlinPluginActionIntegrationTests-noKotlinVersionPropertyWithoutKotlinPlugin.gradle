@@ -1,0 +1,14 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id 'org.springframework.boot' version '{version}'
+}
+
+tasks.register("kotlinVersion") {
+	def kotlinVersion = project.findProperty('kotlin.version') ?: 'none'
+	doLast {
+		println "Kotlin version: ${kotlinVersion}"
+	}
+}

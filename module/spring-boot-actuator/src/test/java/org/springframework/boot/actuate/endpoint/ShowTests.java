@@ -1,0 +1,96 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+package org.springframework.boot.actuate.endpoint;
+
+import java.security.Principal;
+import java.util.Collections;
+
+import org.junit.jupiter.api.Test;
+
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.mock;
+
+/**
+ * Tests for {@link Show}.
+ *
+ * @author Madhura Bhave
+ */
+class ShowTests {
+
+	@Test
+	void isShownWhenNever() {
+		assertThat(Show.NEVER.isShown(SecurityContext.NONE, Collections.emptySet())).isFalse();
+		assertThat(Show.NEVER.isShown(true)).isFalse();
+		assertThat(Show.NEVER.isShown(false)).isFalse();
+	}
+
+	@Test
+	void isShownWhenAlways() {
+		assertThat(Show.ALWAYS.isShown(SecurityContext.NONE, Collections.emptySet())).isTrue();
+		assertThat(Show.ALWAYS.isShown(true)).isTrue();
+		assertThat(Show.ALWAYS.isShown(true)).isTrue();
+	}
+
+	@Test
+	void isShownWithUnauthorizedResult() {
+		assertThat(Show.WHEN_AUTHORIZED.isShown(true)).isTrue();
+		assertThat(Show.WHEN_AUTHORIZED.isShown(false)).isFalse();
+	}
+
+	@Test
+	void isShownWhenUserNotInRole() {
+		SecurityContext securityContext = mock(SecurityContext.class);
+		given(securityContext.getPrincipal()).willReturn(mock(Principal.class));
+		given(securityContext.isUserInRole("admin")).willReturn(false);
+		assertThat(Show.WHEN_AUTHORIZED.isShown(securityContext, Collections.singleton("admin"))).isFalse();
+	}
+
+	@Test
+	void isShownWhenUserInRole() {
+		SecurityContext securityContext = mock(SecurityContext.class);
+		given(securityContext.getPrincipal()).willReturn(mock(Principal.class));
+		given(securityContext.isUserInRole("admin")).willReturn(true);
+		assertThat(Show.WHEN_AUTHORIZED.isShown(securityContext, Collections.singleton("admin"))).isTrue();
+	}
+
+	@Test
+	void isShownWhenPrincipalNull() {
+		SecurityContext securityContext = mock(SecurityContext.class);
+		given(securityContext.isUserInRole("admin")).willReturn(true);
+		assertThat(Show.WHEN_AUTHORIZED.isShown(securityContext, Collections.singleton("admin"))).isFalse();
+	}
+
+	@Test
+	void isShownWhenRolesEmpty() {
+		SecurityContext securityContext = mock(SecurityContext.class);
+		given(securityContext.getPrincipal()).willReturn(mock(Principal.class));
+		assertThat(Show.WHEN_AUTHORIZED.isShown(securityContext, Collections.emptySet())).isTrue();
+	}
+
+	@Test
+	void isShownWhenSpringSecurityAuthenticationAndUnauthorized() {
+		SecurityContext securityContext = mock(SecurityContext.class);
+		Authentication authentication = mock(Authentication.class);
+		given(securityContext.getPrincipal()).willReturn(authentication);
+		given(authentication.getAuthorities())
+			.willAnswer((invocation) -> Collections.singleton(new SimpleGrantedAuthority("other")));
+		assertThat(Show.WHEN_AUTHORIZED.isShown(securityContext, Collections.singleton("admin"))).isFalse();
+	}
+
+	@Test
+	void isShownWhenSpringSecurityAuthenticationAndAuthorized() {
+		SecurityContext securityContext = mock(SecurityContext.class);
+		Authentication authentication = mock(Authentication.class);
+		given(securityContext.getPrincipal()).willReturn(authentication);
+		given(authentication.getAuthorities())
+			.willAnswer((invocation) -> Collections.singleton(new SimpleGrantedAuthority("admin")));
+		assertThat(Show.WHEN_AUTHORIZED.isShown(securityContext, Collections.singleton("admin"))).isTrue();
+	}
+
+}

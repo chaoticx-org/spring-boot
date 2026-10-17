@@ -1,0 +1,14 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id "org.springframework.boot.starter"
+}
+
+description = "Starter for testing Neo4j graph database"
+
+dependencies {
+	api(project(":starter:spring-boot-starter-neo4j"))
+	api(project(":starter:spring-boot-starter-test"))
+}

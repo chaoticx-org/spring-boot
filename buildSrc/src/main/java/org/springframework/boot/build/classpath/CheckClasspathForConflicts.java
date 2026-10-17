@@ -1,17 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      https://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2012-present the original author or authors.
  */
 
 package org.springframework.boot.build.classpath;
@@ -34,6 +22,7 @@ import java.util.function.Predicate;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.gradle.api.DefaultTask;
 import org.gradle.api.GradleException;
@@ -47,7 +36,7 @@ import org.gradle.api.tasks.TaskAction;
  *
  * @author Andy Wilkinson
  */
-public class CheckClasspathForConflicts extends DefaultTask {
+public abstract class CheckClasspathForConflicts extends DefaultTask {
 
 	private final List<Predicate<String>> ignores = new ArrayList<>();
 
@@ -68,8 +57,10 @@ public class CheckClasspathForConflicts extends DefaultTask {
 		for (File file : this.classpath) {
 			if (file.isDirectory()) {
 				Path root = file.toPath();
-				Files.walk(root).filter(Files::isRegularFile)
+				try (Stream<Path> pathStream = Files.walk(root)) {
+					pathStream.filter(Files::isRegularFile)
 						.forEach((entry) -> classpathContents.add(root.relativize(entry).toString(), root.toString()));
+				}
 			}
 			else {
 				try (JarFile jar = new JarFile(file)) {
@@ -108,9 +99,11 @@ public class CheckClasspathForConflicts extends DefaultTask {
 		}
 
 		private Map<String, List<String>> getConflicts(List<Predicate<String>> ignores) {
-			return this.classpathContents.entrySet().stream().filter((entry) -> entry.getValue().size() > 1)
-					.filter((entry) -> canConflict(entry.getKey(), ignores))
-					.collect(Collectors.toMap(Entry::getKey, Entry::getValue, (v1, v2) -> v1, TreeMap::new));
+			return this.classpathContents.entrySet()
+				.stream()
+				.filter((entry) -> entry.getValue().size() > 1)
+				.filter((entry) -> canConflict(entry.getKey(), ignores))
+				.collect(Collectors.toMap(Entry::getKey, Entry::getValue, (v1, v2) -> v1, TreeMap::new));
 		}
 
 		private boolean canConflict(String name, List<Predicate<String>> ignores) {

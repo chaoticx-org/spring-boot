@@ -1,0 +1,18 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id "java"
+}
+
+description = "Spring Boot secure Jersey smoke test"
+
+dependencies {
+	implementation(project(":starter:spring-boot-starter-actuator"))
+	implementation(project(":starter:spring-boot-starter-jersey"))
+	implementation(project(":starter:spring-boot-starter-security"))
+
+	testImplementation(project(":starter:spring-boot-starter-jersey-test"))
+	testImplementation(project(":module:spring-boot-restclient"))
+}

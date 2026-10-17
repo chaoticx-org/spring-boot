@@ -1,0 +1,38 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id "java-library"
+	id "org.springframework.boot.auto-configuration"
+	id "org.springframework.boot.configuration-properties"
+	id "org.springframework.boot.deployed"
+	id "org.springframework.boot.optional-dependencies"
+}
+
+description = "Spring Boot Tracing Brave"
+
+dependencies {
+	api(project(":core:spring-boot"))
+	api(project(":module:spring-boot-micrometer-observation"))
+	api(project(":module:spring-boot-micrometer-tracing"))
+	api("io.micrometer:micrometer-tracing")
+	optional(project(":core:spring-boot-autoconfigure"))
+	optional(project(":module:spring-boot-zipkin"))
+	optional("io.micrometer:micrometer-tracing-bridge-brave")
+	optional("io.zipkin.reporter2:zipkin-reporter-brave")
+
+	testImplementation(project(":core:spring-boot-test"))
+	testImplementation(project(":test-support:spring-boot-test-support"))
+	testImplementation(project(":module:spring-boot-micrometer-metrics"))
+	testImplementation(project(":module:spring-boot-opentelemetry"))
+	testImplementation("io.micrometer:micrometer-registry-prometheus")
+	testImplementation("io.prometheus:prometheus-metrics-exposition-formats")
+	testImplementation("io.micrometer:micrometer-registry-otlp")
+
+	testRuntimeOnly("ch.qos.logback:logback-classic")
+}
+
+tasks.named("compileTestJava") {
+	options.nullability.checking = "tests"
+}

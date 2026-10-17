@@ -1,0 +1,57 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+package org.springframework.boot.docs.actuator.cloudfoundry.customcontextpath;
+
+import java.util.Map;
+
+import reactor.core.publisher.Mono;
+
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.webflux.autoconfigure.WebFluxProperties;
+import org.springframework.context.ApplicationContext;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.http.server.reactive.ContextPathCompositeHandler;
+import org.springframework.http.server.reactive.HttpHandler;
+import org.springframework.http.server.reactive.ServerHttpRequest;
+import org.springframework.http.server.reactive.ServerHttpResponse;
+import org.springframework.web.server.adapter.WebHttpHandlerBuilder;
+
+@Configuration(proxyBeanMethods = false)
+@EnableConfigurationProperties(WebFluxProperties.class)
+public class MyReactiveCloudFoundryConfiguration {
+
+	@Bean
+	public HttpHandler httpHandler(ApplicationContext applicationContext, WebFluxProperties properties) {
+		HttpHandler httpHandler = WebHttpHandlerBuilder.applicationContext(applicationContext).build();
+		return new CloudFoundryHttpHandler(properties.getBasePath(), httpHandler);
+	}
+
+	private static final class CloudFoundryHttpHandler implements HttpHandler {
+
+		private final HttpHandler delegate;
+
+		private final ContextPathCompositeHandler contextPathDelegate;
+
+		private CloudFoundryHttpHandler(String basePath, HttpHandler delegate) {
+			this.delegate = delegate;
+			this.contextPathDelegate = new ContextPathCompositeHandler(Map.of(basePath, delegate));
+		}
+
+		@Override
+		public Mono<Void> handle(ServerHttpRequest request, ServerHttpResponse response) {
+			// Remove underlying context path first (e.g. Servlet container)
+			String path = request.getPath().pathWithinApplication().value();
+			if (path.startsWith("/cloudfoundryapplication")) {
+				return this.delegate.handle(request, response);
+			}
+			else {
+				return this.contextPathDelegate.handle(request, response);
+			}
+		}
+
+	}
+
+}

@@ -1,0 +1,83 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+package org.springframework.boot.micrometer.metrics.autoconfigure;
+
+import io.micrometer.core.annotation.Timed;
+import io.micrometer.core.instrument.Clock;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.binder.MeterBinder;
+import io.micrometer.core.instrument.composite.CompositeMeterRegistry;
+import io.micrometer.core.instrument.config.MeterFilter;
+import io.micrometer.core.instrument.observation.DefaultMeterObservationHandler;
+import io.micrometer.core.instrument.observation.MeterObservationHandler;
+
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.micrometer.observation.autoconfigure.ObservationHandlerGroup;
+import org.springframework.context.ApplicationContext;
+import org.springframework.context.annotation.Bean;
+import org.springframework.core.annotation.Order;
+
+/**
+ * {@link EnableAutoConfiguration Auto-configuration} for Micrometer-based metrics.
+ *
+ * @author Jon Schneider
+ * @author Stephane Nicoll
+ * @author Moritz Halbritter
+ * @author Michael Berry
+ * @author Phillip Webb
+ * @since 4.0.0
+ */
+@AutoConfiguration(before = CompositeMeterRegistryAutoConfiguration.class)
+@ConditionalOnClass(Timed.class)
+@EnableConfigurationProperties(MetricsProperties.class)
+public final class MetricsAutoConfiguration {
+
+	@Bean
+	@ConditionalOnMissingBean
+	Clock micrometerClock() {
+		return Clock.SYSTEM;
+	}
+
+	@Bean
+	static MeterRegistryPostProcessor meterRegistryPostProcessor(ApplicationContext applicationContext,
+			ObjectProvider<MetricsProperties> metricsProperties,
+			ObjectProvider<MeterRegistryCustomizer<?>> meterRegistryCustomizers,
+			ObjectProvider<MeterFilter> meterFilters, ObjectProvider<MeterBinder> meterBinders,
+			ObjectProvider<MeterRegistryCloser> meterRegistryCloser) {
+		return new MeterRegistryPostProcessor(applicationContext, metricsProperties, meterRegistryCustomizers,
+				meterFilters, meterBinders, meterRegistryCloser);
+	}
+
+	@Bean
+	@Order(0)
+	PropertiesMeterFilter propertiesMeterFilter(MetricsProperties properties) {
+		return new PropertiesMeterFilter(properties);
+	}
+
+	@Bean
+	MeterRegistryCloser meterRegistryCloser(ApplicationContext context) {
+		return new MeterRegistryCloser(context);
+	}
+
+	@Bean
+	ObservationHandlerGroup metricsObservationHandlerGroup() {
+		return ObservationHandlerGroup.of(MeterObservationHandler.class);
+	}
+
+	@Bean
+	DefaultMeterObservationHandler defaultMeterObservationHandler(ObjectProvider<MeterRegistry> meterRegistryProvider,
+			Clock clock, MetricsProperties properties) {
+		MeterRegistry meterRegistry = meterRegistryProvider.getIfAvailable(() -> new CompositeMeterRegistry(clock));
+		return DefaultMeterObservationHandler.builder(meterRegistry)
+			.includeActiveObservationLongTaskTimer(properties.getObservations().isIncludeActiveLongTaskTimer())
+			.build();
+	}
+
+}

@@ -1,0 +1,95 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+package org.springframework.boot.gradle.tasks.bundling;
+
+import javax.inject.Inject;
+
+import org.gradle.api.Action;
+import org.gradle.api.GradleException;
+import org.gradle.api.model.ObjectFactory;
+import org.gradle.api.provider.Property;
+import org.gradle.api.tasks.Input;
+import org.jspecify.annotations.Nullable;
+
+import org.springframework.boot.buildpack.platform.build.Cache;
+import org.springframework.boot.gradle.tasks.bundling.LocalCacheSpec.BindCacheSpec;
+import org.springframework.boot.gradle.tasks.bundling.LocalCacheSpec.VolumeCacheSpec;
+
+/**
+ * Configuration for an image building cache.
+ *
+ * @author Scott Frederick
+ * @since 2.6.0
+ */
+public class CacheSpec {
+
+	private final ObjectFactory objectFactory;
+
+	private @Nullable Cache cache;
+
+	@Inject
+	public CacheSpec(ObjectFactory objectFactory) {
+		this.objectFactory = objectFactory;
+	}
+
+	public @Nullable Cache asCache() {
+		return this.cache;
+	}
+
+	/**
+	 * Configures a volume cache using the given {@code action}.
+	 * @param action the action
+	 */
+	public void volume(Action<VolumeCacheSpec> action) {
+		if (this.cache != null) {
+			throw new GradleException("Each image building cache can be configured only once");
+		}
+		VolumeCacheSpec spec = this.objectFactory.newInstance(VolumeCacheSpec.class);
+		action.execute(spec);
+		this.cache = Cache.volume(spec.getName().get());
+	}
+
+	/**
+	 * Configures a bind cache using the given {@code action}.
+	 * @param action the action
+	 */
+	public void bind(Action<BindCacheSpec> action) {
+		if (this.cache != null) {
+			throw new GradleException("Each image building cache can be configured only once");
+		}
+		BindCacheSpec spec = this.objectFactory.newInstance(BindCacheSpec.class);
+		action.execute(spec);
+		this.cache = Cache.bind(spec.getSource().get());
+	}
+
+	/**
+	 * Configures an image cache using the given {@code action}.
+	 * @param action the action
+	 * @since 4.2.0
+	 */
+	public void image(Action<ImageCacheSpec> action) {
+		if (this.cache != null) {
+			throw new GradleException("Each image building cache can be configured only once");
+		}
+		ImageCacheSpec spec = this.objectFactory.newInstance(ImageCacheSpec.class);
+		action.execute(spec);
+		this.cache = Cache.image(spec.getName().get());
+	}
+
+	/**
+	 * Configuration for an image building cache stored in an image.
+	 */
+	public abstract static class ImageCacheSpec {
+
+		/**
+		 * Returns the name of the cache image.
+		 * @return the cache image name
+		 */
+		@Input
+		public abstract Property<String> getName();
+
+	}
+
+}

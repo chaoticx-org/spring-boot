@@ -1,0 +1,30 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id "java-library"
+	id "org.springframework.boot.deployed"
+}
+
+description = "Spring Boot Loader"
+
+dependencies {
+	compileOnly("org.springframework:spring-core")
+
+	testImplementation(project(":test-support:spring-boot-test-support"))
+
+	testRuntimeOnly("ch.qos.logback:logback-classic")
+	testRuntimeOnly("org.bouncycastle:bcprov-jdk18on:1.78.1")
+	testRuntimeOnly("org.springframework:spring-webmvc")
+}
+
+tasks.configureEach {
+	if ("checkArchitectureMainJava".equals(it.name)) {
+		prohibitObjectsRequireNonNull = false
+	}
+}
+
+nullability {
+	requireExplicitNullMarking = false
+}

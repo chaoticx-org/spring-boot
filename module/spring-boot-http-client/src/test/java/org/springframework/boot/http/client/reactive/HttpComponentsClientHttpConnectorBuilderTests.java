@@ -1,0 +1,168 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+package org.springframework.boot.http.client.reactive;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.function.Function;
+
+import org.apache.hc.client5.http.DnsResolver;
+import org.apache.hc.client5.http.HttpRoute;
+import org.apache.hc.client5.http.async.HttpAsyncClient;
+import org.apache.hc.client5.http.config.ConnectionConfig;
+import org.apache.hc.client5.http.config.RequestConfig;
+import org.apache.hc.client5.http.cookie.StandardCookieSpec;
+import org.apache.hc.client5.http.impl.async.HttpAsyncClientBuilder;
+import org.apache.hc.client5.http.impl.nio.PoolingAsyncClientConnectionManagerBuilder;
+import org.apache.hc.core5.function.Resolver;
+import org.apache.hc.core5.http.nio.ssl.TlsStrategy;
+import org.jspecify.annotations.Nullable;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
+
+import org.springframework.boot.http.client.HttpClientSettings;
+import org.springframework.boot.http.client.HttpComponentsHttpAsyncClientBuilder;
+import org.springframework.boot.http.client.HttpCookieHandling;
+import org.springframework.boot.http.client.InetAddressFilter;
+import org.springframework.boot.ssl.SslBundle;
+import org.springframework.boot.testsupport.classpath.resources.WithPackageResources;
+import org.springframework.http.client.reactive.HttpComponentsClientHttpConnector;
+import org.springframework.test.util.ReflectionTestUtils;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+
+/**
+ * Tests for {@link HttpComponentsClientHttpConnectorBuilder} and
+ * {@link HttpComponentsHttpAsyncClientBuilder}.
+ *
+ * @author Phillip Webb
+ */
+class HttpComponentsClientHttpConnectorBuilderTests
+		extends AbstractClientHttpConnectorBuilderTests<HttpComponentsClientHttpConnector> {
+
+	HttpComponentsClientHttpConnectorBuilderTests() {
+		super(HttpComponentsClientHttpConnector.class, ClientHttpConnectorBuilder.httpComponents());
+	}
+
+	@Test
+	void withCustomizers() {
+		TestCustomizer<HttpAsyncClientBuilder> httpClientCustomizer1 = new TestCustomizer<>();
+		TestCustomizer<HttpAsyncClientBuilder> httpClientCustomizer2 = new TestCustomizer<>();
+		TestCustomizer<PoolingAsyncClientConnectionManagerBuilder> connectionManagerCustomizer = new TestCustomizer<>();
+		TestCustomizer<ConnectionConfig.Builder> connectionConfigCustomizer1 = new TestCustomizer<>();
+		TestCustomizer<ConnectionConfig.Builder> connectionConfigCustomizer2 = new TestCustomizer<>();
+		TestCustomizer<RequestConfig.Builder> defaultRequestConfigCustomizer = new TestCustomizer<>();
+		TestCustomizer<RequestConfig.Builder> defaultRequestConfigCustomizer1 = new TestCustomizer<>();
+		ClientHttpConnectorBuilder.httpComponents()
+			.withHttpClientCustomizer(httpClientCustomizer1)
+			.withHttpClientCustomizer(httpClientCustomizer2)
+			.withConnectionManagerCustomizer(connectionManagerCustomizer)
+			.withConnectionConfigCustomizer(connectionConfigCustomizer1)
+			.withConnectionConfigCustomizer(connectionConfigCustomizer2)
+			.withDefaultRequestConfigCustomizer(defaultRequestConfigCustomizer)
+			.withDefaultRequestConfigCustomizer(defaultRequestConfigCustomizer1)
+			.build();
+		httpClientCustomizer1.assertCalled();
+		httpClientCustomizer2.assertCalled();
+		connectionManagerCustomizer.assertCalled();
+		connectionConfigCustomizer1.assertCalled();
+		connectionConfigCustomizer2.assertCalled();
+		defaultRequestConfigCustomizer.assertCalled();
+		defaultRequestConfigCustomizer1.assertCalled();
+	}
+
+	@Test
+	@WithPackageResources("test.jks")
+	void withTlsSocketStrategyFactory() {
+		HttpClientSettings settings = HttpClientSettings.ofSslBundle(sslBundle());
+		List<SslBundle> bundles = new ArrayList<>();
+		Function<@Nullable SslBundle, @Nullable TlsStrategy> tlsSocketStrategyFactory = (bundle) -> {
+			bundles.add(bundle);
+			return (sessionLayer, host, localAddress, remoteAddress, attachment, handshakeTimeout) -> false;
+		};
+		ClientHttpConnectorBuilder.httpComponents()
+			.withTlsSocketStrategyFactory(tlsSocketStrategyFactory)
+			.build(settings);
+		assertThat(bundles).contains(settings.sslBundle());
+	}
+
+	@Test
+	void with() {
+		TestCustomizer<HttpAsyncClientBuilder> customizer = new TestCustomizer<>();
+		ClientHttpConnectorBuilder.httpComponents()
+			.with((builder) -> builder.withHttpClientCustomizer(customizer))
+			.build();
+		customizer.assertCalled();
+	}
+
+	@Test
+	void withDnsResolver() {
+		DnsResolver dnsResolver = mock();
+		HttpComponentsClientHttpConnector connector = ClientHttpConnectorBuilder.httpComponents()
+			.withDnsResolver(dnsResolver)
+			.build();
+		assertThat(connector).extracting("client.manager.connectionOperator.sessionRequester.dnsResolver")
+			.isSameAs(dnsResolver);
+	}
+
+	@Test
+	void withDnsResolverWhenHasInetAddressMatcher() {
+		DnsResolver dnsResolver = mock();
+		HttpComponentsClientHttpConnector connector = ClientHttpConnectorBuilder.httpComponents()
+			.withDnsResolver(dnsResolver)
+			.build(HttpClientSettings.defaults().withInetAddressFilter(InetAddressFilter.externalAddresses()));
+		assertThat(connector).extracting("client.manager.connectionOperator.sessionRequester.dnsResolver")
+			.matches((resolver) -> resolver.getClass().getName().contains("HttpComponentsFiltered"));
+		assertThat(connector).extracting("client.manager.connectionOperator.sessionRequester.dnsResolver.delegate")
+			.isSameAs(dnsResolver);
+	}
+
+	@Test
+	void defaultCookieHandling() {
+		HttpComponentsClientHttpConnector connector = ClientHttpConnectorBuilder.httpComponents()
+			.build(HttpClientSettings.defaults());
+		assertThat(connector).extracting("client.defaultConfig.cookieSpec").isNull();
+	}
+
+	@Test
+	void cookieHandlingDisabled() {
+		HttpComponentsClientHttpConnector connector = ClientHttpConnectorBuilder.httpComponents()
+			.build(HttpClientSettings.defaults().withCookieHandling(HttpCookieHandling.DISABLE));
+		assertThat(connector).extracting("client.defaultConfig.cookieSpec").isEqualTo(StandardCookieSpec.IGNORE);
+	}
+
+	@ParameterizedTest
+	@EnumSource(names = { "ENABLE", "ENABLE_WHEN_POSSIBLE" })
+	void cookieHandlingEnabled(HttpCookieHandling cookieHandling) {
+		HttpComponentsClientHttpConnector connector = ClientHttpConnectorBuilder.httpComponents()
+			.build(HttpClientSettings.defaults().withCookieHandling(cookieHandling));
+		assertThat(connector).extracting("client.defaultConfig.cookieSpec").isEqualTo(StandardCookieSpec.STRICT);
+	}
+
+	@Override
+	protected long connectTimeout(HttpComponentsClientHttpConnector connector) {
+		return getConnectorConfig(connector).getConnectTimeout().toMilliseconds();
+	}
+
+	@Override
+	protected long readTimeout(HttpComponentsClientHttpConnector connector) {
+		return getConnectorConfig(connector).getSocketTimeout().toMilliseconds();
+	}
+
+	@SuppressWarnings("unchecked")
+	private ConnectionConfig getConnectorConfig(HttpComponentsClientHttpConnector connector) {
+		HttpAsyncClient httpClient = (HttpAsyncClient) ReflectionTestUtils.getField(connector, "client");
+		assertThat(httpClient).isNotNull();
+		Object manager = ReflectionTestUtils.getField(httpClient, "manager");
+		assertThat(manager).isNotNull();
+		Resolver<HttpRoute, ConnectionConfig> connectionConfigResolver = (Resolver<HttpRoute, ConnectionConfig>) ReflectionTestUtils
+			.getField(manager, "connectionConfigResolver");
+		assertThat(connectionConfigResolver).isNotNull();
+		return connectionConfigResolver.resolve(null);
+	}
+
+}

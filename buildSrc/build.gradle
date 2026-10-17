@@ -1,46 +1,99 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
 plugins {
 	id "java-gradle-plugin"
 	id "io.spring.javaformat" version "${javaFormatVersion}"
 	id "checkstyle"
+	id "eclipse"
+	id "org.jetbrains.dokka" version "2.1.0"
 }
 
 repositories {
 	mavenCentral()
+	spring.mavenRepositoriesFor("${springFrameworkVersion}")
 	gradlePluginPortal()
-	maven { url "https://repo.spring.io/release" }
+	maven { url = "https://repo.spring.io/snapshot" }
 }
 
-sourceCompatibility = 17
-targetCompatibility = 17
-
-dependencies {
-	checkstyle "io.spring.javaformat:spring-javaformat-checkstyle:${javaFormatVersion}"
-	implementation(platform("org.springframework:spring-framework-bom:5.3.15"))
-	implementation("com.fasterxml.jackson.core:jackson-databind:2.11.4")
-	implementation("commons-codec:commons-codec:1.13")
-	implementation("org.apache.maven:maven-embedder:3.6.2")
-	implementation("org.asciidoctor:asciidoctor-gradle-jvm:3.3.2")
-	implementation("org.gradle:test-retry-gradle-plugin:1.4.0")
-	implementation("org.jetbrains.kotlin:kotlin-gradle-plugin:1.5.0")
-	implementation("org.jetbrains.kotlin:kotlin-compiler-embeddable:1.5.0")
-	implementation("org.springframework:spring-core")
-	implementation("org.springframework:spring-web")
-	implementation("io.spring.javaformat:spring-javaformat-gradle-plugin:${javaFormatVersion}")
-	testImplementation("org.assertj:assertj-core:3.11.1")
-	testImplementation("org.apache.logging.log4j:log4j-core:2.17.1")
-	testImplementation("org.junit.jupiter:junit-jupiter:5.6.0")
-	testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+java {
+	sourceCompatibility = 17
+	targetCompatibility = 17
 }
 
 checkstyle {
-	toolVersion = 8.11
+	toolVersion = "${checkstyleToolVersion}"
+}
+
+dependencies {
+	checkstyle("com.puppycrawl.tools:checkstyle:${checkstyle.toolVersion}")
+	checkstyle("io.spring.javaformat:spring-javaformat-checkstyle:${javaFormatVersion}")
+
+	implementation(platform("com.fasterxml.jackson:jackson-bom:${jackson2Version}"))
+	implementation(platform("tools.jackson:jackson-bom:${jacksonVersion}"))
+	implementation(platform("org.springframework:spring-framework-bom:${springFrameworkVersion}"))
+	implementation("com.github.node-gradle:gradle-node-plugin:7.1.0")
+	implementation("com.google.protobuf:protobuf-gradle-plugin:${protobufGradlePluginVersion}")
+	implementation("com.gradle:develocity-gradle-plugin:4.2.2")
+	implementation("com.tngtech.archunit:archunit:1.4.1")
+	implementation("commons-codec:commons-codec:${commonsCodecVersion}")
+	implementation("de.undercouch.download:de.undercouch.download.gradle.plugin:5.5.0")
+	implementation("org.jetbrains.dokka:dokka-gradle-plugin:2.1.0")
+	implementation("dev.detekt:detekt-gradle-plugin:2.0.0-alpha.0")
+	implementation("io.spring.gradle.antora:spring-antora-plugin:0.0.1")
+	implementation("io.spring.javaformat:spring-javaformat-gradle-plugin:${javaFormatVersion}")
+	implementation("io.spring.nohttp:nohttp-gradle:0.0.11")
+	implementation("org.apache.httpcomponents.client5:httpclient5:5.3.1")
+	implementation("org.apache.maven:maven-artifact:${mavenVersion}")
+	implementation("org.antora:gradle-antora-plugin:1.0.0")
+	implementation("org.jetbrains.kotlin:kotlin-gradle-plugin:${kotlinVersion}")
+	implementation("org.springframework:spring-context")
+	implementation("org.springframework:spring-core")
+	implementation("org.springframework:spring-web")
+	implementation("org.yaml:snakeyaml:${snakeYamlVersion}")
+	implementation("io.spring.gradle.nullability:nullability-plugin:${nullabilityPluginVersion}")
+	implementation("tools.jackson.core:jackson-databind")
+
+	testImplementation(platform("org.junit:junit-bom:${junitJupiterVersion}"))
+	testImplementation("org.assertj:assertj-core:${assertjVersion}")
+	testImplementation("org.hamcrest:hamcrest:${hamcrestVersion}")
+	testImplementation("org.junit.jupiter:junit-jupiter")
+	testImplementation("org.mockito:mockito-core:${mockitoVersion}")
+	testImplementation("org.springframework:spring-test")
+
+	testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+}
+
+configurations.all {
+	exclude group:"org.slf4j", module:"slf4j-api"
+	exclude group:"ch.qos.logback", module:"logback-classic"
+	exclude group:"ch.qos.logback", module:"logback-core"
+
+	resolutionStrategy.cacheChangingModulesFor 0, "minutes"
 }
 
 gradlePlugin {
 	plugins {
+		aggregatorPlugin {
+			id = "org.springframework.boot.aggregator"
+			implementationClass = "org.springframework.boot.build.aggregation.AggregatorPlugin"
+		}
 		annotationProcessorPlugin {
 			id = "org.springframework.boot.annotation-processor"
 			implementationClass = "org.springframework.boot.build.processors.AnnotationProcessorPlugin"
+		}
+		antoraAggregatedPlugin {
+			id = "org.springframework.boot.antora-contributor"
+			implementationClass = "org.springframework.boot.build.antora.AntoraContributorPlugin"
+		}
+		antoraAggregatorPlugin {
+			id = "org.springframework.boot.antora-dependencies"
+			implementationClass = "org.springframework.boot.build.antora.AntoraDependenciesPlugin"
+		}
+		architecturePlugin {
+			id = "org.springframework.boot.architecture"
+			implementationClass = "org.springframework.boot.build.architecture.ArchitecturePlugin"
 		}
 		autoConfigurationPlugin {
 			id = "org.springframework.boot.auto-configuration"
@@ -49,6 +102,10 @@ gradlePlugin {
 		bomPlugin {
 			id = "org.springframework.boot.bom"
 			implementationClass = "org.springframework.boot.build.bom.BomPlugin"
+		}
+		configurationMetadataPlugin {
+			id = "org.springframework.boot.configuration-metadata"
+			implementationClass = "org.springframework.boot.build.context.properties.ConfigurationMetadataPlugin"
 		}
 		configurationPropertiesPlugin {
 			id = "org.springframework.boot.configuration-properties"
@@ -62,13 +119,13 @@ gradlePlugin {
 			id = "org.springframework.boot.deployed"
 			implementationClass = "org.springframework.boot.build.DeployedPlugin"
 		}
+		dockerTestPlugin {
+			id = "org.springframework.boot.docker-test"
+			implementationClass = "org.springframework.boot.build.test.DockerTestPlugin"
+		}
 		integrationTestPlugin {
 			id = "org.springframework.boot.integration-test"
 			implementationClass = "org.springframework.boot.build.test.IntegrationTestPlugin"
-		}
-		systemTestPlugin {
-			id = "org.springframework.boot.system-test"
-			implementationClass = "org.springframework.boot.build.test.SystemTestPlugin"
 		}
 		mavenPluginPlugin {
 			id = "org.springframework.boot.maven-plugin"
@@ -86,9 +143,21 @@ gradlePlugin {
 			id = "org.springframework.boot.starter"
 			implementationClass = "org.springframework.boot.build.starters.StarterPlugin"
 		}
+		systemTestPlugin {
+			id = "org.springframework.boot.system-test"
+			implementationClass = "org.springframework.boot.build.test.SystemTestPlugin"
+		}
+		testAutoConfigurationPlugin {
+			id = "org.springframework.boot.test-auto-configuration"
+			implementationClass = "org.springframework.boot.build.test.autoconfigure.TestAutoConfigurationPlugin"
+		}
 		testFailuresPlugin {
 			id = "org.springframework.boot.test-failures"
 			implementationClass = "org.springframework.boot.build.testing.TestFailuresPlugin"
+		}
+		testSlicePlugin {
+			id = "org.springframework.boot.test-slice"
+			implementationClass = "org.springframework.boot.build.test.autoconfigure.TestSlicePlugin"
 		}
 	}
 }
@@ -96,3 +165,15 @@ gradlePlugin {
 test {
 	useJUnitPlatform()
 }
+
+eclipse {
+	jdt {
+		file {
+			withProperties {
+				it["org.eclipse.jdt.core.compiler.ignoreUnnamedModuleForSplitPackage"] = "enabled"
+			}
+		}
+	}
+}
+
+jar.dependsOn check

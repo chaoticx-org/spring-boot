@@ -1,0 +1,215 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+package org.springframework.boot.kafka.autoconfigure;
+
+import java.io.IOException;
+import java.time.Duration;
+import java.util.Map;
+import java.util.function.Predicate;
+
+import org.jspecify.annotations.Nullable;
+
+import org.springframework.aot.hint.MemberCategory;
+import org.springframework.aot.hint.RuntimeHints;
+import org.springframework.aot.hint.RuntimeHintsRegistrar;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBooleanProperty;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnSingleCandidate;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.context.properties.PropertyMapper;
+import org.springframework.boot.kafka.autoconfigure.KafkaProperties.Admin;
+import org.springframework.boot.kafka.autoconfigure.KafkaProperties.Jaas;
+import org.springframework.boot.kafka.autoconfigure.KafkaProperties.Retry.Topic.Backoff;
+import org.springframework.boot.kafka.autoconfigure.KafkaProperties.SimpleAdmin;
+import org.springframework.boot.kafka.autoconfigure.KafkaProperties.Template;
+import org.springframework.boot.ssl.SslBundles;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
+import org.springframework.context.annotation.ImportRuntimeHints;
+import org.springframework.core.retry.RetryPolicy;
+import org.springframework.kafka.core.ConsumerFactory;
+import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
+import org.springframework.kafka.core.DefaultKafkaProducerFactory;
+import org.springframework.kafka.core.KafkaAdmin;
+import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.kafka.core.ProducerFactory;
+import org.springframework.kafka.retrytopic.RetryTopicConfiguration;
+import org.springframework.kafka.retrytopic.RetryTopicConfigurationBuilder;
+import org.springframework.kafka.security.jaas.KafkaJaasLoginModuleInitializer;
+import org.springframework.kafka.support.LoggingProducerListener;
+import org.springframework.kafka.support.ProducerListener;
+import org.springframework.kafka.support.converter.RecordMessageConverter;
+import org.springframework.kafka.support.micrometer.KafkaTemplateObservationConvention;
+import org.springframework.kafka.transaction.KafkaTransactionManager;
+import org.springframework.util.backoff.BackOff;
+
+/**
+ * {@link EnableAutoConfiguration Auto-configuration} for Apache Kafka.
+ *
+ * @author Gary Russell
+ * @author Stephane Nicoll
+ * @author Eddú Meléndez
+ * @author Nakul Mishra
+ * @author Tomaz Fernandes
+ * @author Moritz Halbritter
+ * @author Andy Wilkinson
+ * @author Phillip Webb
+ * @author Andy Wilkinson
+ * @author Scott Frederick
+ * @since 4.0.0
+ */
+@AutoConfiguration
+@ConditionalOnClass(KafkaTemplate.class)
+@EnableConfigurationProperties(KafkaProperties.class)
+@Import({ KafkaAnnotationDrivenConfiguration.class, KafkaStreamsAnnotationDrivenConfiguration.class })
+@ImportRuntimeHints(KafkaAutoConfiguration.KafkaRuntimeHints.class)
+public final class KafkaAutoConfiguration {
+
+	private final KafkaProperties properties;
+
+	KafkaAutoConfiguration(KafkaProperties properties) {
+		this.properties = properties;
+	}
+
+	@Bean
+	@ConditionalOnMissingBean(KafkaConnectionDetails.class)
+	PropertiesKafkaConnectionDetails kafkaConnectionDetails(ObjectProvider<SslBundles> sslBundles) {
+		return new PropertiesKafkaConnectionDetails(this.properties, sslBundles.getIfAvailable());
+	}
+
+	@Bean
+	@ConditionalOnMissingBean(KafkaTemplate.class)
+	KafkaTemplate<?, ?> kafkaTemplate(ProducerFactory<Object, Object> kafkaProducerFactory,
+			ProducerListener<Object, Object> kafkaProducerListener,
+			ObjectProvider<RecordMessageConverter> messageConverter,
+			ObjectProvider<KafkaTemplateObservationConvention> observationConvention,
+			KafkaConnectionDetails kafkaConnectionDetails) {
+		PropertyMapper map = PropertyMapper.get();
+		KafkaTemplate<Object, Object> kafkaTemplate = new KafkaTemplate<>(kafkaProducerFactory);
+		messageConverter.ifUnique(kafkaTemplate::setMessageConverter);
+		observationConvention.ifUnique(kafkaTemplate::setObservationConvention);
+		map.from(kafkaProducerListener).to(kafkaTemplate::setProducerListener);
+		Template templateProperties = this.properties.getTemplate();
+		map.from(templateProperties.getDefaultTopic()).to(kafkaTemplate::setDefaultTopic);
+		map.from(templateProperties.getTransactionIdPrefix()).to(kafkaTemplate::setTransactionIdPrefix);
+		map.from(templateProperties.getCloseTimeout()).to(kafkaTemplate::setCloseTimeout);
+		map.from(templateProperties.isAllowNonTransactional()).to(kafkaTemplate::setAllowNonTransactional);
+		map.from(templateProperties.isObservationEnabled()).to(kafkaTemplate::setObservationEnabled);
+		SimpleAdmin adminProperties = templateProperties.getAdmin();
+		if (adminProperties != null) {
+			kafkaTemplate
+				.setKafkaAdmin(new KafkaAdminBuilder(this.properties, kafkaConnectionDetails).build(adminProperties));
+		}
+		return kafkaTemplate;
+	}
+
+	@Bean
+	@ConditionalOnMissingBean(ProducerListener.class)
+	LoggingProducerListener<Object, Object> kafkaProducerListener() {
+		return new LoggingProducerListener<>();
+	}
+
+	@Bean
+	@ConditionalOnMissingBean(ConsumerFactory.class)
+	DefaultKafkaConsumerFactory<?, ?> kafkaConsumerFactory(KafkaConnectionDetails connectionDetails,
+			ObjectProvider<DefaultKafkaConsumerFactoryCustomizer> customizers) {
+		Map<String, Object> properties = KafkaConfigBuilder.of(this.properties)
+			.consumer()
+			.withConnectionDetails(connectionDetails)
+			.build();
+		DefaultKafkaConsumerFactory<Object, Object> factory = new DefaultKafkaConsumerFactory<>(properties);
+		customizers.orderedStream().forEach((customizer) -> customizer.customize(factory));
+		return factory;
+	}
+
+	@Bean
+	@ConditionalOnMissingBean(ProducerFactory.class)
+	DefaultKafkaProducerFactory<?, ?> kafkaProducerFactory(KafkaConnectionDetails connectionDetails,
+			ObjectProvider<DefaultKafkaProducerFactoryCustomizer> customizers) {
+		Map<String, Object> properties = KafkaConfigBuilder.of(this.properties)
+			.producer()
+			.withConnectionDetails(connectionDetails)
+			.build();
+		DefaultKafkaProducerFactory<?, ?> factory = new DefaultKafkaProducerFactory<>(properties);
+		String transactionIdPrefix = this.properties.getProducer().getTransactionIdPrefix();
+		if (transactionIdPrefix != null) {
+			factory.setTransactionIdPrefix(transactionIdPrefix);
+		}
+		customizers.orderedStream().forEach((customizer) -> customizer.customize(factory));
+		return factory;
+	}
+
+	@Bean
+	@ConditionalOnProperty(name = "spring.kafka.producer.transaction-id-prefix")
+	@ConditionalOnMissingBean
+	KafkaTransactionManager<?, ?> kafkaTransactionManager(ProducerFactory<?, ?> producerFactory) {
+		return new KafkaTransactionManager<>(producerFactory);
+	}
+
+	@Bean
+	@ConditionalOnBooleanProperty("spring.kafka.jaas.enabled")
+	@ConditionalOnMissingBean
+	KafkaJaasLoginModuleInitializer kafkaJaasInitializer() throws IOException {
+		KafkaJaasLoginModuleInitializer jaas = new KafkaJaasLoginModuleInitializer();
+		Jaas jaasProperties = this.properties.getJaas();
+		if (jaasProperties.getControlFlag() != null) {
+			jaas.setControlFlag(jaasProperties.getControlFlag());
+		}
+		if (jaasProperties.getLoginModule() != null) {
+			jaas.setLoginModule(jaasProperties.getLoginModule());
+		}
+		jaas.setOptions(jaasProperties.getOptions());
+		return jaas;
+	}
+
+	@Bean
+	@ConditionalOnMissingBean
+	KafkaAdmin kafkaAdmin(KafkaConnectionDetails connectionDetails) {
+		Admin adminProperties = this.properties.getAdmin();
+		KafkaAdmin kafkaAdmin = new KafkaAdminBuilder(this.properties, connectionDetails).build(adminProperties);
+		kafkaAdmin.setModifyTopicConfigs(adminProperties.isModifyTopicConfigs());
+		kafkaAdmin.setAutoCreate(adminProperties.isAutoCreate());
+		return kafkaAdmin;
+	}
+
+	@Bean
+	@ConditionalOnBooleanProperty("spring.kafka.retry.topic.enabled")
+	@ConditionalOnSingleCandidate(KafkaTemplate.class)
+	RetryTopicConfiguration kafkaRetryTopicConfiguration(KafkaTemplate<?, ?> kafkaTemplate) {
+		KafkaProperties.Retry.Topic retryTopic = this.properties.getRetry().getTopic();
+		RetryTopicConfigurationBuilder builder = RetryTopicConfigurationBuilder.newInstance()
+			.maxAttempts(retryTopic.getAttempts())
+			.useSingleTopicForSameIntervals()
+			.suffixTopicsWithIndexValues()
+			.doNotAutoCreateRetryTopics()
+			.customBackoff(getBackOff(retryTopic.getBackoff()));
+		return builder.create(kafkaTemplate);
+	}
+
+	static BackOff getBackOff(Backoff retryTopicBackoff) {
+		PropertyMapper map = PropertyMapper.get();
+		RetryPolicy.Builder builder = RetryPolicy.builder().maxRetries(Long.MAX_VALUE);
+		map.from(retryTopicBackoff.getDelay()).to(builder::delay);
+		map.from(retryTopicBackoff.getMaxDelay()).when(Predicate.not(Duration::isZero)).to(builder::maxDelay);
+		map.from(retryTopicBackoff.getMultiplier()).to(builder::multiplier);
+		map.from(retryTopicBackoff.getJitter()).when((Predicate.not(Duration::isZero))).to(builder::jitter);
+		return builder.build().getBackOff();
+	}
+
+	static class KafkaRuntimeHints implements RuntimeHintsRegistrar {
+
+		@Override
+		public void registerHints(RuntimeHints hints, @Nullable ClassLoader classLoader) {
+			hints.reflection().registerType(SslBundleSslEngineFactory.class, MemberCategory.INVOKE_PUBLIC_CONSTRUCTORS);
+		}
+
+	}
+
+}

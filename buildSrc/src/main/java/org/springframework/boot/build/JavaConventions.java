@@ -1,38 +1,44 @@
 /*
- * Copyright 2012-2022 the original author or authors.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      https://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2012-present the original author or authors.
  */
 
 package org.springframework.boot.build;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
 
+import com.gradle.develocity.agent.gradle.test.DevelocityTestConfiguration;
+import com.gradle.develocity.agent.gradle.test.PredictiveTestSelectionConfiguration;
+import com.gradle.develocity.agent.gradle.test.TestRetryConfiguration;
+import io.spring.gradle.nullability.NullabilityPlugin;
+import io.spring.gradle.nullability.NullabilityPluginExtension;
 import io.spring.javaformat.gradle.SpringJavaFormatPlugin;
 import io.spring.javaformat.gradle.tasks.CheckFormat;
 import io.spring.javaformat.gradle.tasks.Format;
+import org.gradle.api.GradleException;
 import org.gradle.api.JavaVersion;
 import org.gradle.api.Project;
+import org.gradle.api.Task;
+import org.gradle.api.artifacts.ComponentMetadataDetails;
 import org.gradle.api.artifacts.Configuration;
 import org.gradle.api.artifacts.ConfigurationContainer;
 import org.gradle.api.artifacts.Dependency;
 import org.gradle.api.artifacts.DependencySet;
+import org.gradle.api.artifacts.ModuleVersionIdentifier;
+import org.gradle.api.attributes.AttributeContainer;
+import org.gradle.api.attributes.Bundling;
+import org.gradle.api.attributes.Category;
+import org.gradle.api.attributes.DocsType;
+import org.gradle.api.attributes.Usage;
+import org.gradle.api.file.FileTreeElement;
+import org.gradle.api.model.ObjectFactory;
 import org.gradle.api.plugins.JavaBasePlugin;
 import org.gradle.api.plugins.JavaPlugin;
 import org.gradle.api.plugins.JavaPluginExtension;
@@ -41,16 +47,24 @@ import org.gradle.api.plugins.quality.CheckstyleExtension;
 import org.gradle.api.plugins.quality.CheckstylePlugin;
 import org.gradle.api.tasks.SourceSet;
 import org.gradle.api.tasks.SourceSetContainer;
+import org.gradle.api.tasks.SourceTask;
+import org.gradle.api.tasks.TaskProvider;
 import org.gradle.api.tasks.bundling.Jar;
 import org.gradle.api.tasks.compile.JavaCompile;
 import org.gradle.api.tasks.javadoc.Javadoc;
 import org.gradle.api.tasks.testing.Test;
 import org.gradle.external.javadoc.CoreJavadocOptions;
-import org.gradle.testretry.TestRetryPlugin;
-import org.gradle.testretry.TestRetryTaskExtension;
+import org.gradle.jvm.toolchain.JavaCompiler;
+import org.gradle.jvm.toolchain.JavaInstallationMetadata;
+import org.gradle.jvm.toolchain.JavaLanguageVersion;
 
+import org.springframework.boot.build.architecture.ArchitecturePlugin;
 import org.springframework.boot.build.classpath.CheckClasspathForProhibitedDependencies;
 import org.springframework.boot.build.optional.OptionalDependenciesPlugin;
+import org.springframework.boot.build.properties.BuildProperties;
+import org.springframework.boot.build.properties.BuildType;
+import org.springframework.boot.build.springframework.CheckAotFactories;
+import org.springframework.boot.build.springframework.CheckSpringFactories;
 import org.springframework.boot.build.testing.TestFailuresPlugin;
 import org.springframework.boot.build.toolchain.ToolchainPlugin;
 import org.springframework.util.StringUtils;
@@ -62,13 +76,16 @@ import org.springframework.util.StringUtils;
  * <ul>
  * <li>The project is configured with source and target compatibility of 17
  * <li>{@link SpringJavaFormatPlugin Spring Java Format}, {@link CheckstylePlugin
- * Checkstyle}, {@link TestFailuresPlugin Test Failures}, and {@link TestRetryPlugin Test
- * Retry} plugins are applied
+ * Checkstyle}, {@link TestFailuresPlugin Test Failures}, {@link ArchitecturePlugin
+ * Architecture} and {@link NullabilityPlugin} plugins are applied
  * <li>{@link Test} tasks are configured:
  * <ul>
  * <li>to use JUnit Platform
- * <li>with a max heap of 1024M
+ * <li>with a max heap of 1536M
  * <li>to run after any Checkstyle and format checking tasks
+ * <li>to enable retries with a maximum of three attempts when running on CI
+ * <li>to use predictive test selection when the value of the
+ * {@code ENABLE_PREDICTIVE_TEST_SELECTION} environment variable is {@code true}
  * </ul>
  * <li>A {@code testRuntimeOnly} dependency upon
  * {@code org.junit.platform:junit-platform-launcher} is added to projects with the
@@ -79,8 +96,8 @@ import org.springframework.util.StringUtils;
  * <ul>
  * <li>Use {@code -parameters}.
  * <li>Treat warnings as errors
- * <li>Enable {@code unchecked}, {@code deprecation}, {@code rawtypes}, and {@code varags}
- * warnings
+ * <li>Enable {@code unchecked}, {@code deprecation}, {@code rawtypes}, and
+ * {@code varargs} warnings
  * </ul>
  * <li>{@link Jar} tasks are configured to produce jars with LICENSE.txt and NOTICE.txt
  * files and the following manifest entries:
@@ -92,6 +109,19 @@ import org.springframework.util.StringUtils;
  * <li>{@code Implementation-Version}
  * </ul>
  * <li>{@code spring-boot-parent} is used for dependency management</li>
+ * <li>Additional checks are configured:
+ * <ul>
+ * <li>For all source sets:
+ * <ul>
+ * <li>Prohibited dependencies on the compile classpath
+ * <li>Prohibited dependencies on the runtime classpath
+ * </ul>
+ * <li>For the {@code main} source set:
+ * <ul>
+ * <li>{@code META-INF/spring/aot.factories}
+ * <li>{@code META-INF/spring.factories}
+ * </ul>
+ * </ul>
  * </ul>
  *
  * <p/>
@@ -103,11 +133,20 @@ import org.springframework.util.StringUtils;
  */
 class JavaConventions {
 
-	private static final String SOURCE_AND_TARGET_COMPATIBILITY = "17";
+	public static final int BUILD_JAVA_VERSION = 25;
+
+	public static final int RUNTIME_JAVA_VERSION = 17;
+
+	private final SystemRequirementsExtension systemRequirements;
+
+	JavaConventions(SystemRequirementsExtension systemRequirements) {
+		this.systemRequirements = systemRequirements;
+	}
 
 	void apply(Project project) {
 		project.getPlugins().withType(JavaBasePlugin.class, (java) -> {
 			project.getPlugins().apply(TestFailuresPlugin.class);
+			project.getPlugins().apply(ArchitecturePlugin.class);
 			configureSpringJavaFormat(project);
 			configureJavaConventions(project);
 			configureJavadocConventions(project);
@@ -116,26 +155,38 @@ class JavaConventions {
 			configureDependencyManagement(project);
 			configureToolchain(project);
 			configureProhibitedDependencyChecks(project);
+			configureFactoriesFilesChecks(project);
+			configureNullability(project);
+			configureDependencyFixes(project);
 		});
 	}
 
 	private void configureJarManifestConventions(Project project) {
-		ExtractResources extractLegalResources = project.getTasks().create("extractLegalResources",
-				ExtractResources.class);
-		extractLegalResources.getDestinationDirectory().set(project.getLayout().getBuildDirectory().dir("legal"));
-		extractLegalResources.setResourcesNames(Arrays.asList("LICENSE.txt", "NOTICE.txt"));
-		extractLegalResources.property("version", project.getVersion().toString());
+		BuildType buildType = BuildProperties.get(project).buildType();
+		String license = (buildType == BuildType.OPEN_SOURCE) ? "Apache License, Version 2.0"
+				: "Broadcom Foundation License";
+		TaskProvider<ExtractResources> extractLegalResources = project.getTasks()
+			.register("extractLegalResources", ExtractResources.class, (task) -> {
+				task.getPackageName().set("org.springframework.boot.build.legal");
+				task.getDestinationDirectory().set(project.getLayout().getBuildDirectory().dir("legal"));
+				task.getResourceNames().set(Arrays.asList("LICENSE.txt", "NOTICE.txt"));
+				task.getProperties().put("version", project.getVersion().toString());
+				task.getProperties().put("license", license);
+			});
 		SourceSetContainer sourceSets = project.getExtensions().getByType(SourceSetContainer.class);
-		Set<String> sourceJarTaskNames = sourceSets.stream().map(SourceSet::getSourcesJarTaskName)
-				.collect(Collectors.toSet());
-		Set<String> javadocJarTaskNames = sourceSets.stream().map(SourceSet::getJavadocJarTaskName)
-				.collect(Collectors.toSet());
+		Set<String> sourceJarTaskNames = sourceSets.stream()
+			.map(SourceSet::getSourcesJarTaskName)
+			.collect(Collectors.toSet());
+		Set<String> javadocJarTaskNames = sourceSets.stream()
+			.map(SourceSet::getJavadocJarTaskName)
+			.collect(Collectors.toSet());
 		project.getTasks().withType(Jar.class, (jar) -> project.afterEvaluate((evaluated) -> {
 			jar.metaInf((metaInf) -> metaInf.from(extractLegalResources));
 			jar.manifest((manifest) -> {
 				Map<String, Object> attributes = new TreeMap<>();
 				attributes.put("Automatic-Module-Name", project.getName().replace("-", "."));
-				attributes.put("Build-Jdk-Spec", SOURCE_AND_TARGET_COMPATIBILITY);
+				// Build-Jdk-Spec is used by buildpacks to pick the JRE to install
+				attributes.put("Build-Jdk-Spec", this.systemRequirements.getJava().getVersion());
 				attributes.put("Built-By", "Spring");
 				attributes.put("Implementation-Title",
 						determineImplementationTitle(project, sourceJarTaskNames, javadocJarTaskNames, jar));
@@ -159,23 +210,40 @@ class JavaConventions {
 	private void configureTestConventions(Project project) {
 		project.getTasks().withType(Test.class, (test) -> {
 			test.useJUnitPlatform();
-			test.setMaxHeapSize("1024M");
+			test.setMaxHeapSize("1536M");
 			project.getTasks().withType(Checkstyle.class, test::mustRunAfter);
 			project.getTasks().withType(CheckFormat.class, test::mustRunAfter);
+			configureTestRetries(test);
+			configurePredictiveTestSelection(test);
 		});
-		project.getPlugins().withType(JavaPlugin.class, (javaPlugin) -> project.getDependencies()
+		project.getPlugins()
+			.withType(JavaPlugin.class, (javaPlugin) -> project.getDependencies()
 				.add(JavaPlugin.TEST_RUNTIME_ONLY_CONFIGURATION_NAME, "org.junit.platform:junit-platform-launcher"));
-		project.getPlugins().apply(TestRetryPlugin.class);
-		project.getTasks().withType(Test.class,
-				(test) -> project.getPlugins().withType(TestRetryPlugin.class, (testRetryPlugin) -> {
-					TestRetryTaskExtension testRetry = test.getExtensions().getByType(TestRetryTaskExtension.class);
-					testRetry.getFailOnPassedAfterRetry().set(true);
-					testRetry.getMaxRetries().set(isCi() ? 3 : 0);
-				}));
+	}
+
+	private void configureTestRetries(Test test) {
+		TestRetryConfiguration testRetry = test.getExtensions()
+			.getByType(DevelocityTestConfiguration.class)
+			.getTestRetry();
+		testRetry.getFailOnPassedAfterRetry().set(false);
+		testRetry.getMaxRetries().set(isCi() ? 3 : 0);
 	}
 
 	private boolean isCi() {
 		return Boolean.parseBoolean(System.getenv("CI"));
+	}
+
+	private void configurePredictiveTestSelection(Test test) {
+		if (isPredictiveTestSelectionEnabled()) {
+			PredictiveTestSelectionConfiguration predictiveTestSelection = test.getExtensions()
+				.getByType(DevelocityTestConfiguration.class)
+				.getPredictiveTestSelection();
+			predictiveTestSelection.getEnabled().convention(true);
+		}
+	}
+
+	private boolean isPredictiveTestSelectionEnabled() {
+		return Boolean.parseBoolean(System.getenv("ENABLE_PREDICTIVE_TEST_SELECTION"));
 	}
 
 	private void configureJavadocConventions(Project project) {
@@ -183,34 +251,42 @@ class JavaConventions {
 			CoreJavadocOptions options = (CoreJavadocOptions) javadoc.getOptions();
 			options.source("17");
 			options.encoding("UTF-8");
-			options.addStringOption("Xdoclint:none", "-quiet");
+			addValuelessOption(options, "Xdoclint:none");
+			addValuelessOption(options, "quiet");
+			if (!javadoc.getName().contains("aggregated")) {
+				addValuelessOption(options, "-no-fonts");
+			}
 		});
+	}
+
+	private void addValuelessOption(CoreJavadocOptions options, String option) {
+		options.addMultilineMultiValueOption(option).setValue(List.of(Collections.emptyList()));
 	}
 
 	private void configureJavaConventions(Project project) {
-		if (!project.hasProperty("toolchainVersion")) {
-			JavaPluginExtension javaPluginExtension = project.getExtensions().getByType(JavaPluginExtension.class);
-			javaPluginExtension.setSourceCompatibility(JavaVersion.toVersion(SOURCE_AND_TARGET_COMPATIBILITY));
-		}
 		project.getTasks().withType(JavaCompile.class, (compile) -> {
+			compile.doFirst((task) -> assertCompatible(compile));
 			compile.getOptions().setEncoding("UTF-8");
-			List<String> args = compile.getOptions().getCompilerArgs();
-			if (!args.contains("-parameters")) {
-				args.add("-parameters");
-			}
-			if (project.hasProperty("toolchainVersion")) {
-				compile.setSourceCompatibility(SOURCE_AND_TARGET_COMPATIBILITY);
-				compile.setTargetCompatibility(SOURCE_AND_TARGET_COMPATIBILITY);
-			}
-			else if (buildingWithJava17(project)) {
-				args.addAll(Arrays.asList("-Werror", "-Xlint:unchecked", "-Xlint:deprecation", "-Xlint:rawtypes",
-						"-Xlint:varargs"));
-			}
+			compile.getOptions().getRelease().set(RUNTIME_JAVA_VERSION);
+			Set<String> args = new LinkedHashSet<>(compile.getOptions().getCompilerArgs());
+			args.addAll(List.of("-parameters", "-Werror", "-Xlint:unchecked", "-Xlint:deprecation", "-Xlint:rawtypes",
+					"-Xlint:varargs"));
+			compile.getOptions().setCompilerArgs(new ArrayList<>(args));
 		});
 	}
 
-	private boolean buildingWithJava17(Project project) {
-		return !project.hasProperty("toolchainVersion") && JavaVersion.current() == JavaVersion.VERSION_17;
+	private void assertCompatible(JavaCompile compile) {
+		JavaVersion requiredVersion = JavaVersion.toVersion(BUILD_JAVA_VERSION);
+		JavaVersion actualVersion = compile.getJavaCompiler()
+			.map(JavaCompiler::getMetadata)
+			.map(JavaInstallationMetadata::getLanguageVersion)
+			.map(JavaLanguageVersion::asInt)
+			.map(JavaVersion::toVersion)
+			.orElse(JavaVersion.current())
+			.get();
+		if (!actualVersion.isCompatibleWith(requiredVersion)) {
+			throw new GradleException("This project should be built with Java %s or above".formatted(requiredVersion));
+		}
 	}
 
 	private void configureSpringJavaFormat(Project project) {
@@ -218,12 +294,26 @@ class JavaConventions {
 		project.getTasks().withType(Format.class, (Format) -> Format.setEncoding("UTF-8"));
 		project.getPlugins().apply(CheckstylePlugin.class);
 		CheckstyleExtension checkstyle = project.getExtensions().getByType(CheckstyleExtension.class);
-		checkstyle.setToolVersion("8.45.1");
-		checkstyle.getConfigDirectory().set(project.getRootProject().file("src/checkstyle"));
+		String checkstyleToolVersion = (String) project.findProperty("checkstyleToolVersion");
+		checkstyle.setToolVersion(checkstyleToolVersion);
+		checkstyle.getConfigDirectory().set(project.getRootProject().file("config/checkstyle"));
 		String version = SpringJavaFormatPlugin.class.getPackage().getImplementationVersion();
 		DependencySet checkstyleDependencies = project.getConfigurations().getByName("checkstyle").getDependencies();
 		checkstyleDependencies
-				.add(project.getDependencies().create("io.spring.javaformat:spring-javaformat-checkstyle:" + version));
+			.add(project.getDependencies().create("com.puppycrawl.tools:checkstyle:" + checkstyle.getToolVersion()));
+		checkstyleDependencies
+			.add(project.getDependencies().create("io.spring.javaformat:spring-javaformat-checkstyle:" + version));
+		project.getTasks().withType(CheckFormat.class, this::excludeGeneratedSources);
+		project.getTasks().withType(Checkstyle.class, this::excludeGeneratedSources);
+	}
+
+	private SourceTask excludeGeneratedSources(SourceTask task) {
+		return task.exclude(this::isGeneratedSource);
+	}
+
+	private boolean isGeneratedSource(FileTreeElement candidate) {
+		String path = StringUtils.cleanPath(candidate.getFile().getPath());
+		return path.contains("/generated/sources/") || path.contains("/generated-source/");
 	}
 
 	private void configureDependencyManagement(Project project) {
@@ -234,14 +324,19 @@ class JavaConventions {
 			configuration.setCanBeResolved(false);
 		});
 		configurations
-				.matching((configuration) -> configuration.getName().endsWith("Classpath")
-						|| JavaPlugin.ANNOTATION_PROCESSOR_CONFIGURATION_NAME.equals(configuration.getName()))
-				.all((configuration) -> configuration.extendsFrom(dependencyManagement));
-		Dependency springBootParent = project.getDependencies().enforcedPlatform(project.getDependencies()
-				.project(Collections.singletonMap("path", ":spring-boot-project:spring-boot-parent")));
+			.matching((configuration) -> (configuration.getName().endsWith("Classpath")
+					|| JavaPlugin.ANNOTATION_PROCESSOR_CONFIGURATION_NAME.equals(configuration.getName()))
+					&& (!configuration.getName().contains("dokka")))
+			.all((configuration) -> configuration.extendsFrom(dependencyManagement));
+		Dependency springBootParent = project.getDependencies()
+			.enforcedPlatform(project.getDependencies()
+				.project(Collections.singletonMap("path", ":platform:spring-boot-internal-dependencies")));
 		dependencyManagement.getDependencies().add(springBootParent);
-		project.getPlugins().withType(OptionalDependenciesPlugin.class, (optionalDependencies) -> configurations
-				.getByName(OptionalDependenciesPlugin.OPTIONAL_CONFIGURATION_NAME).extendsFrom(dependencyManagement));
+		project.getPlugins()
+			.withType(OptionalDependenciesPlugin.class,
+					(optionalDependencies) -> configurations
+						.getByName(OptionalDependenciesPlugin.OPTIONAL_CONFIGURATION_NAME)
+						.extendsFrom(dependencyManagement));
 	}
 
 	private void configureToolchain(Project project) {
@@ -263,11 +358,74 @@ class JavaConventions {
 	}
 
 	private void createProhibitedDependenciesCheck(Configuration classpath, Project project) {
-		CheckClasspathForProhibitedDependencies checkClasspathForProhibitedDependencies = project.getTasks().create(
-				"check" + StringUtils.capitalize(classpath.getName() + "ForProhibitedDependencies"),
-				CheckClasspathForProhibitedDependencies.class);
-		checkClasspathForProhibitedDependencies.setClasspath(classpath);
+		TaskProvider<CheckClasspathForProhibitedDependencies> checkClasspathForProhibitedDependencies = project
+			.getTasks()
+			.register("check" + StringUtils.capitalize(classpath.getName() + "ForProhibitedDependencies"),
+					CheckClasspathForProhibitedDependencies.class, (task) -> task.setClasspath(classpath));
 		project.getTasks().getByName(JavaBasePlugin.CHECK_TASK_NAME).dependsOn(checkClasspathForProhibitedDependencies);
+	}
+
+	private void configureFactoriesFilesChecks(Project project) {
+		SourceSetContainer sourceSets = project.getExtensions().getByType(JavaPluginExtension.class).getSourceSets();
+		sourceSets.matching((sourceSet) -> SourceSet.MAIN_SOURCE_SET_NAME.equals(sourceSet.getName()))
+			.configureEach((main) -> {
+				TaskProvider<Task> check = project.getTasks().named(JavaBasePlugin.CHECK_TASK_NAME);
+				TaskProvider<CheckAotFactories> checkAotFactories = project.getTasks()
+					.register("checkAotFactories", CheckAotFactories.class, (task) -> {
+						task.setSource(main.getResources());
+						task.setClasspath(main.getOutput().getClassesDirs());
+						task.setDescription("Checks the META-INF/spring/aot.factories file of the main source set.");
+					});
+				check.configure((task) -> task.dependsOn(checkAotFactories));
+				TaskProvider<CheckSpringFactories> checkSpringFactories = project.getTasks()
+					.register("checkSpringFactories", CheckSpringFactories.class, (task) -> {
+						task.setSource(main.getResources());
+						task.setClasspath(main.getOutput().getClassesDirs());
+						task.setDescription("Checks the META-INF/spring.factories file of the main source set.");
+					});
+				check.configure((task) -> task.dependsOn(checkSpringFactories));
+			});
+	}
+
+	private void configureNullability(Project project) {
+		project.getPlugins().apply(NullabilityPlugin.class);
+		NullabilityPluginExtension extension = project.getExtensions().getByType(NullabilityPluginExtension.class);
+		String nullAwayVersion = (String) project.findProperty("nullAwayVersion");
+		if (nullAwayVersion != null) {
+			extension.getNullAwayVersion().set(nullAwayVersion);
+		}
+		String errorProneVersion = (String) project.findProperty("errorProneVersion");
+		if (errorProneVersion != null) {
+			extension.getErrorProneVersion().set(errorProneVersion);
+		}
+	}
+
+	private void configureDependencyFixes(Project project) {
+		project.getDependencies().getComponents().all((details) -> {
+			addDocumentationVariant(project, details, "implicitjavadoc", "implicitjavadoc", "javadoc");
+			addDocumentationVariant(project, details, "implicitsources", "implicitsources", "sources");
+		});
+	}
+
+	private void addDocumentationVariant(Project project, ComponentMetadataDetails details, String name,
+			String docsType, String classifier) {
+		ModuleVersionIdentifier id = details.getId();
+		if ("org.nodejs".equals(id.getGroup())) {
+			return;
+		}
+		String file = "%s-%s-%s.jar".formatted(id.getName(), id.getVersion(), classifier);
+		details.addVariant(name, (variant) -> {
+			variant.attributes((attributes) -> addDocumentationAttributes(project, attributes, docsType));
+			variant.withFiles((files) -> files.addFile(file));
+		});
+	}
+
+	private void addDocumentationAttributes(Project project, AttributeContainer attributes, String docsType) {
+		ObjectFactory objects = project.getObjects();
+		attributes.attribute(Usage.USAGE_ATTRIBUTE, objects.named(Usage.class, Usage.JAVA_RUNTIME));
+		attributes.attribute(Category.CATEGORY_ATTRIBUTE, objects.named(Category.class, Category.DOCUMENTATION));
+		attributes.attribute(Bundling.BUNDLING_ATTRIBUTE, objects.named(Bundling.class, Bundling.EXTERNAL));
+		attributes.attribute(DocsType.DOCS_TYPE_ATTRIBUTE, objects.named(DocsType.class, docsType));
 	}
 
 }

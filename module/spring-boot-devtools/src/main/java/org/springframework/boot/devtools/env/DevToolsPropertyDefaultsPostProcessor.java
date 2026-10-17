@@ -1,0 +1,130 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+package org.springframework.boot.devtools.env;
+
+import java.util.Collections;
+import java.util.Map;
+
+import org.apache.commons.logging.Log;
+import org.jspecify.annotations.Nullable;
+
+import org.springframework.boot.EnvironmentPostProcessor;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.devtools.logger.DevToolsLogFactory;
+import org.springframework.boot.devtools.restart.Restarter;
+import org.springframework.boot.devtools.settings.DevToolsSettings;
+import org.springframework.boot.devtools.system.DevToolsEnablementDeducer;
+import org.springframework.core.NativeDetector;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
+import org.springframework.core.env.ConfigurableEnvironment;
+import org.springframework.core.env.Environment;
+import org.springframework.core.env.MapPropertySource;
+import org.springframework.core.log.LogMessage;
+import org.springframework.util.ClassUtils;
+
+/**
+ * {@link EnvironmentPostProcessor} to add properties that make sense when working at
+ * development time.
+ *
+ * @author Phillip Webb
+ * @author Andy Wilkinson
+ * @author Madhura Bhave
+ * @since 1.3.0
+ */
+@Order(Ordered.LOWEST_PRECEDENCE)
+public class DevToolsPropertyDefaultsPostProcessor implements EnvironmentPostProcessor {
+
+	private static final Log logger = DevToolsLogFactory.getLog(DevToolsPropertyDefaultsPostProcessor.class);
+
+	private static final String ENABLED = "spring.devtools.add-properties";
+
+	private static final String WEB_LOGGING = "logging.level.web";
+
+	private static final WebEnvironmentClassResolver[] WEB_ENVIRONMENT_CLASS_RESOLVERS = new WebEnvironmentClassResolver[] {
+			WebEnvironmentClassResolver.fromClassName("org.springframework.web.context.ConfigurableWebEnvironment"),
+			(classloader) -> org.springframework.boot.web.context.reactive.ConfigurableReactiveWebEnvironment.class };
+
+	private static final Map<String, Object> PROPERTIES;
+
+	static {
+		if (NativeDetector.inNativeImage()) {
+			PROPERTIES = Collections.emptyMap();
+		}
+		else {
+			PROPERTIES = DevToolsSettings.get().getPropertyDefaults();
+		}
+	}
+
+	@Override
+	public void postProcessEnvironment(ConfigurableEnvironment environment, SpringApplication application) {
+		if (DevToolsEnablementDeducer.shouldEnable(Thread.currentThread()) && isLocalApplication(environment)) {
+			if (canAddProperties(environment)) {
+				logger.info(LogMessage.format("Devtools property defaults active! Set '%s' to 'false' to disable",
+						ENABLED));
+				environment.getPropertySources().addLast(new MapPropertySource("devtools", PROPERTIES));
+			}
+			if (isWebApplication(environment) && !environment.containsProperty(WEB_LOGGING)) {
+				logger.info(LogMessage.format(
+						"For additional web related logging consider setting the '%s' property to 'DEBUG'",
+						WEB_LOGGING));
+			}
+		}
+	}
+
+	private boolean isLocalApplication(ConfigurableEnvironment environment) {
+		return environment.getPropertySources().get("remoteUrl") == null;
+	}
+
+	private boolean canAddProperties(Environment environment) {
+		if (environment.getProperty(ENABLED, Boolean.class, true)) {
+			return isRestarterInitialized() || isRemoteRestartEnabled(environment);
+		}
+		return false;
+	}
+
+	private boolean isRestarterInitialized() {
+		try {
+			Restarter restarter = Restarter.getInstance();
+			return (restarter != null && restarter.getInitialUrls() != null);
+		}
+		catch (Exception ex) {
+			return false;
+		}
+	}
+
+	private boolean isRemoteRestartEnabled(Environment environment) {
+		return environment.containsProperty("spring.devtools.remote.secret");
+	}
+
+	private boolean isWebApplication(Environment environment) {
+		ClassLoader classLoader = environment.getClass().getClassLoader();
+		for (WebEnvironmentClassResolver resolver : WEB_ENVIRONMENT_CLASS_RESOLVERS) {
+			Class<?> environmentClass = resolver.resolve(classLoader);
+			if (environmentClass != null && environmentClass.isInstance(environment)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private interface WebEnvironmentClassResolver {
+
+		@Nullable Class<?> resolve(ClassLoader classLoader);
+
+		static WebEnvironmentClassResolver fromClassName(String candidate) {
+			return (classLoader) -> {
+				try {
+					return ClassUtils.resolveClassName(candidate, classLoader);
+				}
+				catch (IllegalArgumentException ex) {
+					return null;
+				}
+			};
+		}
+
+	}
+
+}

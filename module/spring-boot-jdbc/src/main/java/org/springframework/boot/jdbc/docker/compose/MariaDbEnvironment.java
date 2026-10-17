@@ -1,0 +1,88 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+package org.springframework.boot.jdbc.docker.compose;
+
+import java.util.Map;
+
+import org.jspecify.annotations.Nullable;
+
+import org.springframework.util.Assert;
+import org.springframework.util.StringUtils;
+
+/**
+ * MariaDB environment details.
+ *
+ * @author Moritz Halbritter
+ * @author Andy Wilkinson
+ * @author Phillip Webb
+ * @author Scott Frederick
+ */
+class MariaDbEnvironment {
+
+	private final String username;
+
+	private final String password;
+
+	private final String database;
+
+	MariaDbEnvironment(Map<String, @Nullable String> env) {
+		this.username = extractUsername(env);
+		this.password = extractPassword(env);
+		this.database = extractDatabase(env);
+	}
+
+	private String extractUsername(Map<String, @Nullable String> env) {
+		String user = env.get("MARIADB_USER");
+		if (user == null) {
+			user = env.get("MYSQL_USER");
+		}
+		return (user != null) ? user : "root";
+	}
+
+	private String extractPassword(Map<String, @Nullable String> env) {
+		boolean hasUserAndPassword = hasUserAndPassword(env);
+		Assert.state(!env.containsKey("MARIADB_RANDOM_ROOT_PASSWORD") || hasUserAndPassword,
+				"MARIADB_RANDOM_ROOT_PASSWORD is not supported without MARIADB_USER and MARIADB_PASSWORD");
+		Assert.state(!env.containsKey("MYSQL_RANDOM_ROOT_PASSWORD") || hasUserAndPassword,
+				"MYSQL_RANDOM_ROOT_PASSWORD is not supported without MYSQL_USER and MYSQL_PASSWORD");
+		Assert.state(!env.containsKey("MARIADB_ROOT_PASSWORD_HASH"), "MARIADB_ROOT_PASSWORD_HASH is not supported");
+		boolean allowEmpty = env.containsKey("MARIADB_ALLOW_EMPTY_ROOT_PASSWORD")
+				|| env.containsKey("MYSQL_ALLOW_EMPTY_PASSWORD") || env.containsKey("ALLOW_EMPTY_PASSWORD");
+		String password = env.get("MARIADB_PASSWORD");
+		password = (password != null) ? password : env.get("MYSQL_PASSWORD");
+		password = (password != null) ? password : env.get("MARIADB_ROOT_PASSWORD");
+		password = (password != null) ? password : env.get("MYSQL_ROOT_PASSWORD");
+		Assert.state(StringUtils.hasLength(password) || allowEmpty, "No MariaDB password found");
+		return (password != null) ? password : "";
+	}
+
+	private boolean hasUserAndPassword(Map<String, @Nullable String> env) {
+		String user = env.get("MARIADB_USER");
+		user = (user != null) ? user : env.get("MYSQL_USER");
+		String password = env.get("MARIADB_PASSWORD");
+		password = (password != null) ? password : env.get("MYSQL_PASSWORD");
+		return StringUtils.hasLength(user) && StringUtils.hasLength(password);
+	}
+
+	private String extractDatabase(Map<String, @Nullable String> env) {
+		String database = env.get("MARIADB_DATABASE");
+		database = (database != null) ? database : env.get("MYSQL_DATABASE");
+		Assert.state(database != null, "No MARIADB_DATABASE defined");
+		return database;
+	}
+
+	String getUsername() {
+		return this.username;
+	}
+
+	String getPassword() {
+		return this.password;
+	}
+
+	String getDatabase() {
+		return this.database;
+	}
+
+}

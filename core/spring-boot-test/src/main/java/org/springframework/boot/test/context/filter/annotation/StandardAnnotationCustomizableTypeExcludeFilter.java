@@ -1,0 +1,98 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+package org.springframework.boot.test.context.filter.annotation;
+
+import java.lang.annotation.Annotation;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Locale;
+import java.util.Set;
+
+import org.springframework.context.annotation.ComponentScan.Filter;
+import org.springframework.core.ResolvableType;
+import org.springframework.core.annotation.MergedAnnotation;
+import org.springframework.core.annotation.MergedAnnotations;
+import org.springframework.core.annotation.MergedAnnotations.SearchStrategy;
+import org.springframework.test.context.TestContextAnnotationUtils;
+import org.springframework.util.Assert;
+
+/**
+ * {@link AnnotationCustomizableTypeExcludeFilter} that can be used to any test annotation
+ * that uses the standard {@code includeFilters}, {@code excludeFilters} and
+ * {@code useDefaultFilters} attributes.
+ *
+ * @param <A> the annotation type
+ * @author Phillip Webb
+ * @since 4.0.0
+ */
+public abstract class StandardAnnotationCustomizableTypeExcludeFilter<A extends Annotation>
+		extends AnnotationCustomizableTypeExcludeFilter {
+
+	private static final Filter[] NO_FILTERS = {};
+
+	private static final String[] FILTER_TYPE_ATTRIBUTES;
+	static {
+		FilterType[] filterValues = FilterType.values();
+		FILTER_TYPE_ATTRIBUTES = new String[filterValues.length];
+		for (int i = 0; i < filterValues.length; i++) {
+			FILTER_TYPE_ATTRIBUTES[i] = filterValues[i].name().toLowerCase(Locale.ROOT) + "Filters";
+		}
+	}
+
+	private final MergedAnnotation<A> annotation;
+
+	protected StandardAnnotationCustomizableTypeExcludeFilter(Class<?> testClass) {
+		this.annotation = MergedAnnotations.search(SearchStrategy.TYPE_HIERARCHY)
+			.withEnclosingClasses(TestContextAnnotationUtils::searchEnclosingClass)
+			.from(testClass)
+			.get(this.getAnnotationType());
+	}
+
+	protected final MergedAnnotation<A> getAnnotation() {
+		return this.annotation;
+	}
+
+	@Override
+	protected boolean hasAnnotation() {
+		return this.annotation.isPresent();
+	}
+
+	@Override
+	protected Filter[] getFilters(FilterType type) {
+		return this.annotation.getValue(FILTER_TYPE_ATTRIBUTES[type.ordinal()], Filter[].class).orElse(NO_FILTERS);
+	}
+
+	@Override
+	protected boolean isUseDefaultFilters() {
+		return this.annotation.getValue("useDefaultFilters", Boolean.class).orElse(false);
+	}
+
+	@Override
+	protected final Set<Class<?>> getDefaultIncludes() {
+		Set<Class<?>> defaultIncludes = new HashSet<>();
+		defaultIncludes.addAll(getKnownIncludes());
+		defaultIncludes.addAll(TypeIncludes.load(this.annotation.getType(), getClass().getClassLoader()).getIncludes());
+		return defaultIncludes;
+	}
+
+	protected Set<Class<?>> getKnownIncludes() {
+		return Collections.emptySet();
+	}
+
+	@Override
+	protected Set<Class<?>> getComponentIncludes() {
+		return Collections.emptySet();
+	}
+
+	@SuppressWarnings("unchecked")
+	protected Class<A> getAnnotationType() {
+		ResolvableType type = ResolvableType.forClass(StandardAnnotationCustomizableTypeExcludeFilter.class,
+				getClass());
+		Class<A> generic = (Class<A>) type.resolveGeneric();
+		Assert.state(generic != null, "'generic' must not be null");
+		return generic;
+	}
+
+}

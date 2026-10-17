@@ -1,0 +1,24 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id "java-library"
+	id "org.springframework.boot.deployed"
+}
+
+description = "Spring Boot Jarmode Tools"
+
+dependencies {
+	implementation(project(":loader:spring-boot-loader"))
+	implementation("org.springframework:spring-core")
+
+	testImplementation("org.assertj:assertj-core")
+	testImplementation("org.junit.jupiter:junit-jupiter")
+	testImplementation("org.mockito:mockito-core")
+	testImplementation("org.mockito:mockito-junit-jupiter")
+}
+
+tasks.named("compileTestJava") {
+	options.nullability.checking = "tests"
+}

@@ -1,0 +1,35 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id "war"
+}
+
+description = "Spring Boot Jetty JSP smoke test"
+
+configurations {
+	providedRuntime {
+		extendsFrom dependencyManagement
+	}
+}
+
+dependencies {
+	compileOnly(project(":starter:spring-boot-starter-jetty"))
+
+	implementation(project(":starter:spring-boot-starter-webmvc")) {
+		exclude module: "spring-boot-starter-tomcat"
+	}
+
+	providedRuntime("org.eclipse.jetty.ee11:jetty-ee11-apache-jsp")
+
+	runtimeOnly("org.glassfish.web:jakarta.servlet.jsp.jstl")
+
+	testImplementation(project(":starter:spring-boot-starter-jetty"))
+	testImplementation(project(":starter:spring-boot-starter-webmvc-test"))
+	testImplementation(project(":module:spring-boot-restclient"))
+}
+
+tasks.named("compileTestJava") {
+	options.nullability.checking = "tests"
+}

@@ -1,0 +1,32 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id "war"
+}
+
+description = "Spring Boot traditional deployment smoke test"
+
+configurations {
+	providedRuntime {
+		extendsFrom dependencyManagement
+	}
+}
+
+dependencies {
+	implementation(project(":starter:spring-boot-starter"))
+	implementation(project(":module:spring-boot-webmvc"))
+
+	providedRuntime(project(":starter:spring-boot-starter-tomcat-runtime"))
+	providedRuntime("org.apache.tomcat.embed:tomcat-embed-jasper")
+
+	testImplementation(project(":module:spring-boot-restclient"))
+	testImplementation(project(":module:spring-boot-resttestclient"))
+	testImplementation(project(":starter:spring-boot-starter-test"))
+	testImplementation("org.apache.httpcomponents.client5:httpclient5")
+}
+
+tasks.named("compileTestJava") {
+	options.nullability.checking = "tests"
+}

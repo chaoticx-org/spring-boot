@@ -1,0 +1,16 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id "org.springframework.boot.starter"
+}
+
+description = "Starter for using Spring gRPC client"
+
+dependencies {
+	api(project(":starter:spring-boot-starter"))
+	api(project(":module:spring-boot-grpc-client"))
+	api("io.grpc:grpc-netty")
+	api("io.grpc:grpc-stub")
+}

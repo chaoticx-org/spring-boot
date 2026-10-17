@@ -1,0 +1,117 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+package org.springframework.boot.health.actuate.endpoint;
+
+import org.junit.jupiter.api.Test;
+
+import org.springframework.boot.actuate.endpoint.web.WebServerNamespace;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
+
+/**
+ * Tests for {@link AdditionalHealthEndpointPath}.
+ *
+ * @author Madhura Bhave
+ */
+class AdditionalHealthEndpointPathTests {
+
+	@Test
+	void fromValidPathShouldCreatePath() {
+		AdditionalHealthEndpointPath path = AdditionalHealthEndpointPath.from("server:/my-path");
+		assertThat(path.getValue()).isEqualTo("/my-path");
+		assertThat(path.getNamespace()).isEqualTo(WebServerNamespace.SERVER);
+	}
+
+	@Test
+	void fromValidPathWithoutSlashShouldCreatePath() {
+		AdditionalHealthEndpointPath path = AdditionalHealthEndpointPath.from("server:my-path");
+		assertThat(path.getValue()).isEqualTo("my-path");
+		assertThat(path.getNamespace()).isEqualTo(WebServerNamespace.SERVER);
+	}
+
+	@Test
+	@SuppressWarnings("NullAway") // Test null check
+	void fromNullPathShouldThrowException() {
+		assertThatIllegalArgumentException().isThrownBy(() -> AdditionalHealthEndpointPath.from(null));
+	}
+
+	@Test
+	void fromEmptyPathShouldThrowException() {
+		assertThatIllegalArgumentException().isThrownBy(() -> AdditionalHealthEndpointPath.from(""));
+	}
+
+	@Test
+	void fromPathWithNoNamespaceShouldThrowException() {
+		assertThatIllegalArgumentException().isThrownBy(() -> AdditionalHealthEndpointPath.from("my-path"));
+	}
+
+	@Test
+	void fromPathWithEmptyNamespaceShouldThrowException() {
+		assertThatIllegalArgumentException().isThrownBy(() -> AdditionalHealthEndpointPath.from(":my-path"));
+	}
+
+	@Test
+	void fromPathWithMultipleSegmentsShouldCreatePath() {
+		AdditionalHealthEndpointPath path = AdditionalHealthEndpointPath.from("server:/my-path/my-sub-path");
+		assertThat(path.getValue()).isEqualTo("/my-path/my-sub-path");
+		assertThat(path.getNamespace()).isEqualTo(WebServerNamespace.SERVER);
+	}
+
+	@Test
+	void fromPathWithMultipleSegmentsNotStartingWithSlashShouldCreatePath() {
+		AdditionalHealthEndpointPath path = AdditionalHealthEndpointPath.from("server:my-path/my-sub-path");
+		assertThat(path.getValue()).isEqualTo("my-path/my-sub-path");
+		assertThat(path.getNamespace()).isEqualTo(WebServerNamespace.SERVER);
+	}
+
+	@Test
+	void pathsWithTheSameNamespaceAndValueAreEqual() {
+		assertThat(AdditionalHealthEndpointPath.from("server:/my-path"))
+			.isEqualTo(AdditionalHealthEndpointPath.from("server:/my-path"));
+	}
+
+	@Test
+	void pathsWithTheDifferentNamespaceAndSameValueAreNotEqual() {
+		assertThat(AdditionalHealthEndpointPath.from("server:/my-path"))
+			.isNotEqualTo((AdditionalHealthEndpointPath.from("management:/my-path")));
+	}
+
+	@Test
+	void pathsWithTheSameNamespaceAndValuesWithNoSlashAreEqual() {
+		assertThat(AdditionalHealthEndpointPath.from("server:/my-path"))
+			.isEqualTo((AdditionalHealthEndpointPath.from("server:my-path")));
+	}
+
+	@Test
+	@SuppressWarnings("NullAway") // Test null check
+	void ofWithNullNamespaceShouldThrowException() {
+		assertThatIllegalArgumentException().isThrownBy(() -> AdditionalHealthEndpointPath.of(null, "my-sub-path"));
+	}
+
+	@Test
+	@SuppressWarnings("NullAway") // Test null check
+	void ofWithNullPathShouldThrowException() {
+		assertThatIllegalArgumentException()
+			.isThrownBy(() -> AdditionalHealthEndpointPath.of(WebServerNamespace.SERVER, null));
+	}
+
+	@Test
+	void ofWithMultipleSegmentValueShouldCreatePath() {
+		AdditionalHealthEndpointPath additionalPath = AdditionalHealthEndpointPath.of(WebServerNamespace.SERVER,
+				"/my-path/my-subpath");
+		assertThat(additionalPath.getValue()).isEqualTo("/my-path/my-subpath");
+		assertThat(additionalPath.getNamespace()).isEqualTo(WebServerNamespace.SERVER);
+	}
+
+	@Test
+	void ofShouldCreatePath() {
+		AdditionalHealthEndpointPath additionalPath = AdditionalHealthEndpointPath.of(WebServerNamespace.SERVER,
+				"my-path");
+		assertThat(additionalPath.getValue()).isEqualTo("my-path");
+		assertThat(additionalPath.getNamespace()).isEqualTo(WebServerNamespace.SERVER);
+	}
+
+}

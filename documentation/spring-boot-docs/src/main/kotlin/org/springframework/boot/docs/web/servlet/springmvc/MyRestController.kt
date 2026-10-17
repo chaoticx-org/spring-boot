@@ -1,0 +1,34 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+package org.springframework.boot.docs.web.servlet.springmvc
+
+import org.springframework.web.bind.annotation.DeleteMapping
+import org.springframework.web.bind.annotation.GetMapping
+import org.springframework.web.bind.annotation.PathVariable
+import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.RestController
+
+
+@RestController
+@RequestMapping("/users")
+class MyRestController(private val userRepository: UserRepository, private val customerRepository: CustomerRepository) {
+
+	@GetMapping("/{userId}")
+	fun getUser(@PathVariable userId: Long): User {
+		return userRepository.findById(userId).get()
+	}
+
+	@GetMapping("/{userId}/customers")
+	fun getUserCustomers(@PathVariable userId: Long): List<Customer> {
+		return userRepository.findById(userId).map(customerRepository::findByUser).get()
+	}
+
+	@DeleteMapping("/{userId}")
+	fun deleteUser(@PathVariable userId: Long) {
+		userRepository.deleteById(userId)
+	}
+
+}
+

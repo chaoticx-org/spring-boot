@@ -1,0 +1,24 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id "java"
+}
+
+description = "Spring Boot structured logging Log4j2 smoke test"
+
+configurations.all {
+	exclude module: "spring-boot-starter-logging"
+}
+
+dependencies {
+	implementation(project(":starter:spring-boot-starter"))
+	implementation(project(":starter:spring-boot-starter-log4j2"))
+
+	testImplementation(project(":starter:spring-boot-starter-test"))
+}
+
+tasks.named("compileTestJava") {
+	options.nullability.checking = "tests"
+}

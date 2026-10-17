@@ -1,0 +1,22 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id "java"
+}
+
+description = "Spring Boot Jackson 2 without Jackson 3 smoke test"
+
+dependencies {
+	implementation(project(":module:spring-boot-jackson2"))
+	implementation(project(":starter:spring-boot-starter-actuator"))
+	implementation(project(":starter:spring-boot-starter-webmvc")) {
+		exclude module: 'spring-boot-starter-jackson'
+	}
+
+	testImplementation(project(":starter:spring-boot-starter-webmvc-test")) {
+		exclude module: 'spring-boot-starter-jackson'
+	}
+	testImplementation(project(":test-support:spring-boot-test-support"))
+}

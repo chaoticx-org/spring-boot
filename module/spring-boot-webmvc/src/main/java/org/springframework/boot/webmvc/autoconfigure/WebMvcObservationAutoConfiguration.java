@@ -1,0 +1,104 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+package org.springframework.boot.webmvc.autoconfigure;
+
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.observation.Observation;
+import io.micrometer.observation.ObservationRegistry;
+import jakarta.servlet.DispatcherType;
+
+import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingFilterBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication.Type;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.micrometer.metrics.MaximumAllowableTagsMeterFilter;
+import org.springframework.boot.micrometer.metrics.autoconfigure.MetricsProperties;
+import org.springframework.boot.micrometer.observation.autoconfigure.ObservationProperties;
+import org.springframework.boot.micrometer.observation.autoconfigure.condition.ConditionalOnSemanticConventions;
+import org.springframework.boot.micrometer.observation.autoconfigure.condition.SemanticConventions;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
+import org.springframework.http.server.observation.DefaultServerRequestObservationConvention;
+import org.springframework.http.server.observation.OpenTelemetryServerRequestObservationConvention;
+import org.springframework.http.server.observation.ServerRequestObservationConvention;
+import org.springframework.web.filter.ServerHttpObservationFilter;
+import org.springframework.web.servlet.DispatcherServlet;
+
+/**
+ * {@link EnableAutoConfiguration Auto-configuration} for instrumentation of Spring Web
+ * MVC servlet-based request mappings.
+ *
+ * @author Brian Clozel
+ * @author Jon Schneider
+ * @author Dmytro Nosan
+ * @since 4.0.0
+ */
+@AutoConfiguration(afterName = {
+		"org.springframework.boot.micrometer.metrics.autoconfigure.CompositeMeterRegistryAutoConfiguration",
+		"org.springframework.boot.micrometer.metrics.autoconfigure.MetricsAutoConfiguration",
+		"org.springframework.boot.micrometer.metrics.autoconfigure.export.simple.SimpleMetricsExportAutoConfiguration",
+		"org.springframework.boot.micrometer.observation.autoconfigure.ObservationAutoConfiguration" })
+@ConditionalOnWebApplication(type = Type.SERVLET)
+@ConditionalOnClass({ DispatcherServlet.class, Observation.class, ObservationProperties.class })
+@ConditionalOnBean(ObservationRegistry.class)
+@EnableConfigurationProperties(ObservationProperties.class)
+public final class WebMvcObservationAutoConfiguration {
+
+	@Bean
+	@ConditionalOnMissingFilterBean
+	FilterRegistrationBean<ServerHttpObservationFilter> webMvcObservationFilter(ObservationRegistry registry,
+			ServerRequestObservationConvention convention) {
+		ServerHttpObservationFilter filter = new ServerHttpObservationFilter(registry, convention);
+		FilterRegistrationBean<ServerHttpObservationFilter> registration = new FilterRegistrationBean<>(filter);
+		registration.setOrder(Ordered.HIGHEST_PRECEDENCE + 1);
+		registration.setDispatcherTypes(DispatcherType.REQUEST, DispatcherType.ASYNC);
+		return registration;
+	}
+
+	@ConditionalOnMissingBean(ServerRequestObservationConvention.class)
+	static class ServerRequestObservationConventionConfiguration {
+
+		@Bean
+		@ConditionalOnSemanticConventions(SemanticConventions.MICROMETER)
+		DefaultServerRequestObservationConvention micrometerServerRequestObservationConvention(
+				ObservationProperties observationProperties) {
+			String name = observationProperties.getHttp().getServer().getRequests().getName();
+			return new DefaultServerRequestObservationConvention(name);
+		}
+
+		@Bean
+		@ConditionalOnSemanticConventions(SemanticConventions.OPEN_TELEMETRY)
+		OpenTelemetryServerRequestObservationConvention openTelemetryServerRequestObservationConvention() {
+			return new OpenTelemetryServerRequestObservationConvention();
+		}
+
+	}
+
+	@Configuration(proxyBeanMethods = false)
+	@ConditionalOnClass({ MeterRegistry.class, MetricsProperties.class })
+	@ConditionalOnBean(MeterRegistry.class)
+	@EnableConfigurationProperties(MetricsProperties.class)
+	static class MeterFilterConfiguration {
+
+		@Bean
+		@Order(0)
+		MaximumAllowableTagsMeterFilter metricsHttpServerUriTagFilter(ObservationProperties observationProperties,
+				MetricsProperties metricsProperties) {
+			String meterNamePrefix = observationProperties.getHttp().getServer().getRequests().getName();
+			int maxUriTags = metricsProperties.getWeb().getServer().getMaxUriTags();
+			return new MaximumAllowableTagsMeterFilter(meterNamePrefix, "uri", maxUriTags);
+		}
+
+	}
+
+}

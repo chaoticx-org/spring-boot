@@ -1,0 +1,15 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id "java-library"
+	id "org.springframework.boot.deployed"
+}
+
+description = "Spring Boot AutoConfigure Classic"
+
+dependencies {
+	api(project(":core:spring-boot-autoconfigure"))
+	api(project(":module:spring-boot-autoconfigure-classic-modules"))
+}

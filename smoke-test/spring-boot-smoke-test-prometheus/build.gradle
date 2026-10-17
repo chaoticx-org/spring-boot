@@ -1,0 +1,26 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id "java"
+}
+
+description = "Spring Boot Prometheus smoke test"
+
+dependencies {
+	implementation(project(":starter:spring-boot-starter-actuator"))
+	implementation(project(":starter:spring-boot-starter-webmvc"))
+	implementation(project(":module:spring-boot-micrometer-tracing-brave"))
+	implementation('io.micrometer:micrometer-tracing-bridge-brave')
+
+	runtimeOnly('io.micrometer:micrometer-registry-prometheus')
+
+	testImplementation(project(":starter:spring-boot-starter-micrometer-metrics-test"))
+	testImplementation(project(":starter:spring-boot-starter-webmvc-test"))
+	testImplementation(project(":module:spring-boot-restclient"))
+}
+
+tasks.named("compileTestJava") {
+	options.nullability.checking = "tests"
+}

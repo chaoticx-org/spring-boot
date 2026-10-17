@@ -1,0 +1,123 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+package org.springframework.boot.docker.compose.lifecycle;
+
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
+import org.jspecify.annotations.Nullable;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
+import org.springframework.boot.docker.compose.core.RunningService;
+import org.springframework.boot.docker.compose.lifecycle.DockerComposeProperties.Readiness.Tcp;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
+import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.mock;
+
+/**
+ * Tests for {@link ServiceReadinessChecks}.
+ *
+ * @author Moritz Halbritter
+ * @author Andy Wilkinson
+ * @author Phillip Webb
+ */
+class ServiceReadinessChecksTests {
+
+	private Clock clock;
+
+	Instant now = Instant.now();
+
+	private RunningService runningService;
+
+	private List<RunningService> runningServices;
+
+	@BeforeEach
+	void setup() {
+		this.clock = mock(Clock.class);
+		given(this.clock.instant()).willAnswer((args) -> this.now);
+		this.runningService = mock(RunningService.class);
+		this.runningServices = List.of(this.runningService);
+	}
+
+	@Test
+	void waitUntilReadyWhenImmediatelyReady() {
+		MockServiceReadinessCheck check = new MockServiceReadinessCheck();
+		createChecks(check).waitUntilReady(this.runningServices);
+		assertThat(check.getChecked()).contains(this.runningService);
+	}
+
+	@Test
+	void waitUntilReadyWhenTakesTimeToBeReady() {
+		MockServiceReadinessCheck check = new MockServiceReadinessCheck(2);
+		createChecks(check).waitUntilReady(this.runningServices);
+		assertThat(check.getChecked()).hasSize(2).contains(this.runningService);
+	}
+
+	@Test
+	void waitUntilReadyWhenTimeout() {
+		MockServiceReadinessCheck check = new MockServiceReadinessCheck(Integer.MAX_VALUE);
+		assertThatExceptionOfType(ReadinessTimeoutException.class)
+			.isThrownBy(() -> createChecks(check).waitUntilReady(this.runningServices))
+			.satisfies((ex) -> assertThat(ex.getSuppressed()).hasSize(1));
+		assertThat(check.getChecked()).hasSizeGreaterThan(10);
+	}
+
+	@Test
+	void waitForWhenServiceHasDisableLabelDoesNotCheck() {
+		given(this.runningService.labels()).willReturn(Map.of("org.springframework.boot.readiness-check.disable", ""));
+		MockServiceReadinessCheck check = new MockServiceReadinessCheck();
+		createChecks(check).waitUntilReady(this.runningServices);
+		assertThat(check.getChecked()).isEmpty();
+	}
+
+	void sleep(Duration duration) {
+		this.now = this.now.plus(duration);
+	}
+
+	private ServiceReadinessChecks createChecks(TcpConnectServiceReadinessCheck check) {
+		DockerComposeProperties properties = new DockerComposeProperties();
+		return new ServiceReadinessChecks(properties.getReadiness(), this.clock, this::sleep, check);
+	}
+
+	/**
+	 * Mock {@link TcpConnectServiceReadinessCheck}.
+	 */
+	static class MockServiceReadinessCheck extends TcpConnectServiceReadinessCheck {
+
+		private final @Nullable Integer failUntil;
+
+		private final List<RunningService> checked = new ArrayList<>();
+
+		MockServiceReadinessCheck() {
+			this(null);
+		}
+
+		MockServiceReadinessCheck(@Nullable Integer failUntil) {
+			super(new Tcp());
+			this.failUntil = failUntil;
+		}
+
+		@Override
+		public void check(RunningService service) throws ServiceNotReadyException {
+			this.checked.add(service);
+			if (this.failUntil != null && this.checked.size() < this.failUntil) {
+				throw new ServiceNotReadyException(service, "Waiting");
+			}
+		}
+
+		List<RunningService> getChecked() {
+			return this.checked;
+		}
+
+	}
+
+}

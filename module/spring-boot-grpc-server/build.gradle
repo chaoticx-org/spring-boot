@@ -1,0 +1,48 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id "java-library"
+	id "org.springframework.boot.auto-configuration"
+	id "org.springframework.boot.configuration-properties"
+	id "org.springframework.boot.deployed"
+	id "org.springframework.boot.optional-dependencies"
+}
+
+description = "Spring Boot gRPC Server"
+
+dependencies {
+	api(project(":core:spring-boot"))
+	api("org.springframework.grpc:spring-grpc-core")
+
+	optional(project(":core:spring-boot-autoconfigure"))
+	optional(project(":module:spring-boot-health"))
+	optional(project(":module:spring-boot-micrometer-observation"))
+	optional(project(":module:spring-boot-security"))
+	optional(project(":module:spring-boot-security-oauth2-resource-server"))
+	optional("com.fasterxml.jackson.core:jackson-annotations")
+	optional("io.projectreactor:reactor-core")
+	optional("io.grpc:grpc-servlet-jakarta")
+	optional("io.grpc:grpc-services")
+	optional("io.grpc:grpc-netty")
+	optional("io.grpc:grpc-netty-shaded")
+	optional("io.grpc:grpc-inprocess")
+	optional("io.grpc:grpc-kotlin-stub") {
+		exclude group: "javax.annotation", module: "javax.annotation-api"
+	}
+	optional("io.micrometer:micrometer-core")
+	optional("io.micrometer:context-propagation")
+	optional("jakarta.servlet:jakarta.servlet-api")
+
+	testImplementation(project(":core:spring-boot-test"))
+	testImplementation(project(":test-support:spring-boot-test-support"))
+	testImplementation(testFixtures(project(":core:spring-boot-autoconfigure")))
+	testImplementation("org.springframework:spring-web")
+
+	testRuntimeOnly("ch.qos.logback:logback-classic")
+}
+
+tasks.named("compileTestJava") {
+	options.nullability.checking = "tests"
+}

@@ -1,0 +1,16 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id "org.springframework.boot.starter"
+}
+
+description = "Starter for testing R2DBC"
+
+dependencies {
+	api(project(":starter:spring-boot-starter-r2dbc"))
+	api(project(":starter:spring-boot-starter-test"))
+
+	api("io.projectreactor:reactor-test")
+}

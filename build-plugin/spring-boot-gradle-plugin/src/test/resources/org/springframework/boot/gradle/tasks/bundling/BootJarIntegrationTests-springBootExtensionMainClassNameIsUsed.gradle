@@ -1,0 +1,13 @@
+/*
+ * Copyright 2012-present the original author or authors.
+ */
+
+plugins {
+	id 'java'
+	id 'application'
+	id 'org.springframework.boot' version '{version}'
+}
+
+springBoot {
+	mainClass = 'com.example.CustomMain'
+}
